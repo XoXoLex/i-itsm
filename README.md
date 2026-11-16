@@ -8,7 +8,7 @@ tracks SLA deadlines, escalates automatically, notifies everyone involved and ke
 
 ## Run it
 
-Needs **Node.js 22 or 24 LTS** (from nodejs.org).
+Needs **Node.js 22.13+ or 24 LTS** (from nodejs.org). Nothing else: the database is built into Node, so there is no native compile step.
 
 ```bash
 npm run setup     # installs everything and builds the frontend (first time only)
@@ -61,7 +61,7 @@ Optional settings go in `.env` (see `.env.example`). Setting `GEMINI_API_KEY` sw
 | Language | TypeScript (front and back) | One language end to end; classes, abstract classes, interfaces, access modifiers and generics map directly onto OOP concepts; compile-time type checking |
 | Backend | Node.js + Express 5 | Lightweight REST layer; the domain model stays framework-free |
 | Frontend | React 19 + Vite | Component model; a separate UI per role |
-| Database | SQLite via better-sqlite3 | ACID, zero setup, a single file; the Repository pattern means swapping in PostgreSQL only needs a new repository class |
+| Database | SQLite, built into Node.js (`node:sqlite`) | ACID, zero setup, a single file; the Repository pattern means swapping in PostgreSQL only needs a new repository class |
 | Auth | JWT + scrypt-hashed passwords | Stateless sessions; salted hashes, never plain text |
 | Real-time | Server-Sent Events | Live dashboard refresh and push notifications without extra infrastructure |
 | AI (optional) | Google Gemini Decisions API (`gemini-decision-1`) or `gemini-4-hydrogen` | Incident categorisation behind an Adapter, with automatic keyword fallback |

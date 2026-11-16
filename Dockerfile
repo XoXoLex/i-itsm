@@ -3,7 +3,7 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-# Backend dependencies (better-sqlite3 ships prebuilt binaries for this image)
+# Backend dependencies (pure JavaScript; SQLite is built into Node 22+)
 COPY package.json package-lock.json ./
 RUN npm ci
 

@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { AuditEntry } from "../domain/AuditEntry";
@@ -11,7 +11,19 @@ import { InboxItem } from "../notifications/channels";
 import { InMemoryRepository } from "../repositories/Repository";
 import { SLAViolation } from "../services/SLAService";
 
-type DB = Database.Database;
+type DB = DatabaseSync;
+
+/** Runs fn inside one SQLite transaction; rolls back if it throws. */
+function inTransaction(db: DB, fn: () => void): void {
+  db.exec("BEGIN");
+  try {
+    fn();
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
 
 /** Maps one aggregate type to/from its table(s). */
 interface RowMapper<T> {
@@ -20,7 +32,8 @@ interface RowMapper<T> {
 }
 
 /**
- * Write-through repository: keeps an identity map in memory (fast reads, one
+ * Write-through repository over Node's built-in SQLite (node:sqlite, no native build step).
+ * Keeps an identity map in memory (fast reads, one
  * object per row) and writes every save to SQLite inside a transaction.
  * Implements the same Repository<T> interface as the in-memory version.
  */
@@ -46,7 +59,7 @@ export class SqliteRepository<T extends { id: string }> extends InMemoryReposito
 
   private run(fn: () => void): void {
     try {
-      this.db.transaction(fn)();
+      inTransaction(this.db, fn);
     } catch (e) {
       throw new PersistenceException(`Database write failed: ${(e as Error).message}`);
     }
@@ -125,7 +138,14 @@ const incidentMapper: RowMapper<Incident> = {
          resolved_at=@resolvedAt, closed_at=@closedAt, resolution=@resolution, feedback_rating=@feedbackRating,
          feedback_comment=@feedbackComment, escalation_level=@escalationLevel, response_breached=@rb,
          resolution_breached=@resb, warned=@w`,
-    ).run({ ...s, related: undefined, rb: bool(s.responseBreached), resb: bool(s.resolutionBreached), w: bool(s.warned) });
+    ).run({
+      id: s.id, reporterId: s.reporterId, title: s.title, description: s.description, serviceId: s.serviceId,
+      impact: s.impact, urgency: s.urgency, affectedUsers: s.affectedUsers, createdAt: s.createdAt, status: s.status,
+      category: s.category, priority: s.priority, priorityScore: s.priorityScore, assigneeId: s.assigneeId,
+      responseBy: s.responseBy, resolveBy: s.resolveBy, acknowledgedAt: s.acknowledgedAt, resolvedAt: s.resolvedAt,
+      closedAt: s.closedAt, resolution: s.resolution, feedbackRating: s.feedbackRating, feedbackComment: s.feedbackComment,
+      escalationLevel: s.escalationLevel, rb: bool(s.responseBreached), resb: bool(s.resolutionBreached), w: bool(s.warned),
+    });
 
     db.prepare("DELETE FROM incident_notes WHERE incident_id = ?").run(inc.id);
     const note = db.prepare("INSERT INTO incident_notes (incident_id, author_id, kind, text, at) VALUES (?, ?, ?, ?, ?)");
@@ -185,9 +205,8 @@ export class SqliteStore {
 
   constructor(path: string) {
     try {
-      this.db = new Database(path);
-      this.db.pragma("journal_mode = WAL");
-      this.db.pragma("foreign_keys = ON");
+      this.db = new DatabaseSync(path);
+      this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
       this.db.exec(readFileSync(join(__dirname, "..", "..", "schema.sql"), "utf8"));
     } catch (e) {
       throw new PersistenceException(`Cannot open database at ${path}: ${(e as Error).message}`);
@@ -219,13 +238,13 @@ export class SqliteStore {
   /** Re-links incident_links rows that could not be written earlier (forward references). */
   relinkAll(): void {
     const ins = this.db.prepare("INSERT OR IGNORE INTO incident_links (incident_id, related_id) VALUES (?, ?)");
-    this.db.transaction(() => {
+    inTransaction(this.db, () => {
       for (const inc of this.incidents.findAll()) inc.related.forEach((r) => ins.run(inc.id, r));
-    })();
+    });
   }
 
   private all<R>(sql: string): R[] {
-    return this.db.prepare(sql).all() as R[];
+    return this.db.prepare(sql).all() as unknown as R[];
   }
 
   private load(): void {
