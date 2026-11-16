@@ -1,0 +1,15 @@
+# One-click deploy on Render (render.com → New → Blueprint → pick this repo).
+services:
+  - type: web
+    name: i-itsm
+    runtime: node
+    plan: free
+    buildCommand: npm run setup
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: JWT_SECRET
+        generateValue: true
+      # Optional: add GEMINI_API_KEY in the Render dashboard to switch on AI categorisation.
