@@ -1,13 +1,15 @@
 import { AuditEntry } from "../domain/AuditEntry";
 import { Incident } from "../domain/Incident";
 import { Level } from "../domain/enums";
+import { ITService } from "../domain/catalog";
 import { Employee, Technician, User } from "../domain/users";
+import { EmailRecord } from "../notifications/channels";
 import { ESCALATION_CHAIN, SLAService } from "../services/SLAService";
 
 /** Plain JSON shapes sent to the browser. Password hashes never leave the server. */
 export function userDTO(u: User) {
   return {
-    id: u.id, name: u.name, email: u.email, role: u.role,
+    id: u.id, name: u.name, email: u.email, role: u.role, active: u.active,
     department: u instanceof Employee ? u.department : undefined,
     ...(u instanceof Technician
       ? { skills: u.skillList, experienceYears: u.experienceYears, workload: u.workload, maxActive: u.maxActiveIncidents, available: u.available }
@@ -21,7 +23,7 @@ export function incidentDTO(i: Incident, sla: SLAService) {
     category: i.category ?? null, priority: i.priority ?? null, priorityScore: i.priorityScore,
     impact: i.impact, impactLabel: Level[i.impact], urgency: i.urgency, urgencyLabel: Level[i.urgency], affectedUsers: i.affectedUsers,
     createdAt: i.createdAt,
-    service: { id: i.service.id, name: i.service.name, criticality: Level[i.service.criticality] },
+    service: { id: i.service.id, name: i.service.name, criticality: Level[i.service.criticality], userBase: i.service.userBase },
     reporter: { id: i.reporter.id, name: i.reporter.name },
     assignee: i.assignee ? { id: i.assignee.id, name: i.assignee.name } : null,
     sla: {
@@ -40,6 +42,14 @@ export function incidentDetailDTO(i: Incident, sla: SLAService) {
     ...incidentDTO(i, sla),
     timeline: i.timeline.map((n) => ({ author: { id: n.author.id, name: n.author.name, role: n.author.role }, kind: n.kind, text: n.text, at: n.at })),
   };
+}
+
+export function serviceDTO(s: ITService) {
+  return { id: s.id, name: s.name, criticality: s.criticality, userBase: s.userBase, active: s.active };
+}
+
+export function emailDTO(e: EmailRecord) {
+  return { id: e.id, to: e.to, subject: e.subject, body: e.body, incidentId: e.incidentId, at: e.at, status: e.status, detail: e.detail };
 }
 
 export function auditDTO(a: AuditEntry) {

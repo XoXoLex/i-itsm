@@ -28,11 +28,6 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 export interface CategorySuggestion {
   category: string;
   confidence: number; // 0–1
-}
-
-export interface CategorySuggestion {
-  category: string;
-  confidence: number; // 0–1
   source?: string;    // which engine produced it
 }
 
@@ -50,15 +45,18 @@ export class KeywordCategorizer implements Categorizer {
   }
 
   suggestSync(title: string, description: string, categories: Category[]): CategorySuggestion {
-    const tokens = tokenize(`${title} ${title} ${description}`); // title weighted ×2
-    const raw = [...tokens, ...`${title} ${description}`.toLowerCase().split(/\W+/)];
-    let best = { category: "SOFTWARE", hits: 0 };
+    // Each distinct word counts once per field, in both its plain and stemmed form; a hit in the title counts double.
+    const words = (text: string) => [...new Set([...text.toLowerCase().split(/\W+/).filter(Boolean), ...tokenize(text)])];
+    const inTitle = words(title);
+    const inDescription = words(description);
+    let best = { category: "", hits: 0 };
     let total = 0;
     for (const c of categories) {
-      const hits = c.keywordHits(raw);
+      const hits = 2 * c.keywordHits(inTitle) + c.keywordHits(inDescription);
       total += hits;
       if (hits > best.hits) best = { category: c.name, hits };
     }
+    // No keyword matched at all: say so (confidence 0) and let the caller choose its fallback category.
     return { category: best.category, confidence: total === 0 ? 0 : best.hits / total, source: this.name };
   }
 }

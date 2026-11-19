@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { api, fmtTime, Incident, Meta, STATUS_LABEL, titleCase, User } from "./api";
+import { api, dayBoundary, fmtTime, Incident, Meta, STATUS_LABEL, titleCase, User } from "./api";
 import { Empty, PriorityTag, SlaFuse, StatusText, useLoad, useNow } from "./ui";
 
 type Filters = {
@@ -8,12 +8,15 @@ type Filters = {
 };
 const BLANK: Filters = { text: "", id: "", status: "", priority: "", category: "", serviceId: "", technicianId: "", from: "", to: "", slaStatus: "", openOnly: false };
 
-export function IncidentList({ me, meta, refreshKey, title, preset }: { me: User; meta: Meta; refreshKey: number; title: string; preset?: Partial<Filters> }) {
-  const [f, setF] = useState<Filters>({ ...BLANK, ...preset });
+export type { Filters };
+
+export function IncidentList({ me, meta, refreshKey, title, preset, initial }: { me: User; meta: Meta; refreshKey: number; title: string; preset?: Partial<Filters>; initial?: Partial<Filters> }) {
+  const [f, setF] = useState<Filters>({ ...BLANK, ...preset, ...initial });
   const now = useNow();
   const qs = useMemo(() => {
     const p = new URLSearchParams();
-    Object.entries(f).forEach(([k, v]) => { if (v) p.set(k, String(v)); });
+    // Dates are sent as the start and end of the day on the viewer's clock, so "today" means the viewer's today.
+    Object.entries(f).forEach(([k, v]) => { if (v) p.set(k, k === "from" ? dayBoundary(f.from) : k === "to" ? dayBoundary(f.to, true) : String(v)); });
     return p.toString();
   }, [f]);
   const { data, error } = useLoad(() => api<Incident[]>(`/incidents?${qs}`), [qs, refreshKey]);
@@ -99,7 +102,7 @@ export function IncidentList({ me, meta, refreshKey, title, preset }: { me: User
                     <span className="sub">{i.service.name}{i.category ? `, ${titleCase(i.category)}` : ""}{i.related.length > 0 && <span className="linked"> · linked to {i.related.length}</span>}{i.escalatedTo && <span className="escalated"> · escalated to {titleCase(i.escalatedTo)}</span>}</span>
                   </td>
                   <td><StatusText s={i.status} /></td>
-                  {!isEmployee && <td>{i.assignee?.name ?? <span className="muted">Unassigned</span>}</td>}
+                  {!isEmployee && <td>{i.assignee?.name ?? <span className={i.isOpen ? "escalated" : "muted"}>Unassigned</span>}</td>}
                   <td className="col-sla"><SlaFuse inc={i} now={now} compact /></td>
                   <td className="nowrap muted">{fmtTime(i.createdAt)}</td>
                 </tr>

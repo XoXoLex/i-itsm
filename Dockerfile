@@ -5,11 +5,11 @@ WORKDIR /app
 
 # Backend dependencies (pure JavaScript; SQLite is built into Node 22+)
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 # Frontend build
 COPY web/package.json web/package-lock.json ./web/
-RUN cd web && npm ci
+RUN cd web && npm ci --include=dev
 COPY . .
 RUN cd web && npm run build
 

@@ -1,9 +1,12 @@
 # One-click deploy on Render (render.com → New → Blueprint → pick this repo).
+# The free plan has no persistent disk: the SQLite file is recreated (and re-seeded with sample
+# data) whenever the service restarts or redeploys. Add a disk and point DB_PATH at it to keep data.
 services:
   - type: web
     name: i-itsm
     runtime: node
     plan: free
+    # --include=dev: the frontend build needs Vite and TypeScript even when NODE_ENV=production.
     buildCommand: npm run setup
     startCommand: npm start
     healthCheckPath: /api/health
@@ -12,4 +15,8 @@ services:
         value: "22"
       - key: JWT_SECRET
         generateValue: true
-      # Optional: add GEMINI_API_KEY in the Render dashboard to switch on AI categorisation.
+      - key: TRUST_PROXY
+        value: "1"
+      # Optional, set in the Render dashboard:
+      #   GEMINI_API_KEY               AI categorisation
+      #   RESEND_API_KEY + EMAIL_FROM  real email instead of the simulated channel

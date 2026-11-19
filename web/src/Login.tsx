@@ -33,10 +33,11 @@ export function Login({ onLogin }: { onLogin: (u: User) => void }) {
         <p className="login-lede">
           Report an IT problem and follow it until it is fixed. Every incident gets a priority, an owner and a deadline the moment you file it.
         </p>
+        <p className="login-example">Example: how each incident shows the time left on its deadline.</p>
         <div className="login-fuse" aria-hidden="true">
-          <div className="fuse fuse-risk"><div className="fuse-track"><div className="fuse-fill" style={{ width: "22%" }} /></div><span className="fuse-label">6m left</span></div>
-          <div className="fuse fuse-ok"><div className="fuse-track"><div className="fuse-fill" style={{ width: "71%" }} /></div><span className="fuse-label">1h 25m left</span></div>
-          <div className="fuse fuse-met"><div className="fuse-track"><div className="fuse-fill" style={{ width: "40%" }} /></div><span className="fuse-label">Met · 3h spare</span></div>
+          <div className="fuse fuse-risk"><div className="fuse-track"><div className="fuse-fill" style={{ width: "22%" }} /></div><span className="fuse-label">6m left · at risk</span></div>
+          <div className="fuse fuse-ok"><div className="fuse-track"><div className="fuse-fill" style={{ width: "71%" }} /></div><span className="fuse-label">1h 25m left · on track</span></div>
+          <div className="fuse fuse-met"><div className="fuse-track"><div className="fuse-fill" style={{ width: "40%" }} /></div><span className="fuse-label">Fixed with 3h to spare</span></div>
         </div>
       </section>
 
@@ -60,7 +61,7 @@ export function Login({ onLogin }: { onLogin: (u: User) => void }) {
         </form>
 
         <div className="demo">
-          <p className="demo-title">Demo accounts</p>
+          <p className="demo-title">Demo accounts (seeded sample data, one click to sign in)</p>
           {DEMO.map((d) => (
             <button key={d.email} className="demo-row" onClick={() => go(d.email, d.password)} disabled={busy}>
               <strong>{d.label}</strong><span>{d.who}</span>

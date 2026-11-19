@@ -7,8 +7,8 @@ import { IncidentStatus, Level, Priority, Role } from "../domain/enums";
 import { Incident, IncidentNote, IncidentSnapshot } from "../domain/Incident";
 import { Admin, Employee, PasswordHash, Technician, User } from "../domain/users";
 import { PersistenceException } from "../exceptions/errors";
-import { InboxItem } from "../notifications/channels";
-import { InMemoryRepository } from "../repositories/Repository";
+import { EmailRecord, EmailStatus, InboxItem } from "../notifications/channels";
+import { Repository } from "../repositories/Repository";
 import { SLAViolation } from "../services/SLAService";
 
 type DB = DatabaseSync;
@@ -33,36 +33,57 @@ interface RowMapper<T> {
 
 /**
  * Write-through repository over Node's built-in SQLite (node:sqlite, no native build step).
- * Keeps an identity map in memory (fast reads, one
- * object per row) and writes every save to SQLite inside a transaction.
- * Implements the same Repository<T> interface as the in-memory version.
+ * It implements Repository<T> directly and owns an identity map (one object per row):
+ * every save goes to SQLite inside a transaction first, and only then into the map, so
+ * the map never holds something the database refused. Reads are served from the map.
  */
-export class SqliteRepository<T extends { id: string }> extends InMemoryRepository<T> {
-  constructor(private readonly db: DB, private readonly mapper: RowMapper<T>) {
-    super();
-  }
+export class SqliteRepository<T extends { id: string }> implements Repository<T> {
+  private readonly cache = new Map<string, T>();
+
+  constructor(private readonly db: DB, private readonly mapper: RowMapper<T>) {}
+
+  findById(id: string): T | undefined { return this.cache.get(id); }
+  findAll(): T[] { return [...this.cache.values()]; }
+  count(): number { return this.cache.size; }
 
   save(entity: T): T {
     this.run(() => this.mapper.write(this.db, entity));
-    return super.save(entity);
+    this.cache.set(entity.id, entity);
+    return entity;
   }
 
   delete(id: string): boolean {
     this.run(() => this.mapper.remove(this.db, id));
-    return super.delete(id);
+    return this.cache.delete(id);
   }
 
   /** Load already-built objects into the identity map without re-writing them. */
   hydrate(items: T[]): void {
-    for (const i of items) this.store.set(i.id, i);
+    for (const i of items) this.cache.set(i.id, i);
   }
 
   private run(fn: () => void): void {
     try {
       inTransaction(this.db, fn);
     } catch (e) {
-      throw new PersistenceException(`Database write failed: ${(e as Error).message}`);
+      // The cause is logged for the operator; callers and API clients only see that the write failed.
+      console.error("[SqliteRepository] write failed:", (e as Error).message);
+      throw new PersistenceException("The database could not save this change. Nothing was changed; please try again.");
     }
+  }
+}
+
+/** Columns added after the first release, so a database created by an older version keeps working. */
+const ADDED_COLUMNS: [table: string, column: string, ddl: string][] = [
+  ["users", "active", "INTEGER NOT NULL DEFAULT 1"],
+  ["it_services", "active", "INTEGER NOT NULL DEFAULT 1"],
+  ["incidents", "response_warned", "INTEGER NOT NULL DEFAULT 0"],
+];
+
+function migrate(db: DB): void {
+  for (const [table, column, ddl] of ADDED_COLUMNS) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as unknown as { name: string }[];
+    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
   }
 }
 
@@ -74,14 +95,15 @@ const userMapper: RowMapper<User> = {
   write(db, u) {
     const t = u instanceof Technician ? u : undefined;
     db.prepare(
-      `INSERT INTO users (id, role, name, email, password_hash, department, experience_years, max_active, available)
-       VALUES (@id, @role, @name, @email, @hash, @dept, @exp, @max, @avail)
+      `INSERT INTO users (id, role, name, email, password_hash, department, experience_years, max_active, available, active)
+       VALUES (@id, @role, @name, @email, @hash, @dept, @exp, @max, @avail, @active)
        ON CONFLICT(id) DO UPDATE SET name=@name, email=@email, password_hash=@hash, department=@dept,
-         experience_years=@exp, max_active=@max, available=@avail`,
+         experience_years=@exp, max_active=@max, available=@avail, active=@active`,
     ).run({
       id: u.id, role: u.role, name: u.name, email: u.email, hash: u.storedPasswordHash,
       dept: u instanceof Employee ? u.department : null,
       exp: t?.experienceYears ?? null, max: t?.maxActiveIncidents ?? null, avail: bool(t ? t.available : true),
+      active: bool(u.active),
     });
     if (t) {
       db.prepare("DELETE FROM technician_skills WHERE technician_id = ?").run(t.id);
@@ -95,9 +117,9 @@ const userMapper: RowMapper<User> = {
 const serviceMapper: RowMapper<ITService> = {
   write(db, s) {
     db.prepare(
-      `INSERT INTO it_services (id, name, criticality, user_base) VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET name=excluded.name, criticality=excluded.criticality, user_base=excluded.user_base`,
-    ).run(s.id, s.name, s.criticality, s.userBase);
+      `INSERT INTO it_services (id, name, criticality, user_base, active) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name=excluded.name, criticality=excluded.criticality, user_base=excluded.user_base, active=excluded.active`,
+    ).run(s.id, s.name, s.criticality, s.userBase, bool(s.active));
   },
   remove(db, id) { db.prepare("DELETE FROM it_services WHERE id = ?").run(id); },
 };
@@ -129,27 +151,31 @@ const incidentMapper: RowMapper<Incident> = {
     db.prepare(
       `INSERT INTO incidents (id, reporter_id, title, description, service_id, impact, urgency, affected_users, created_at,
          status, category, priority, priority_score, assignee_id, response_by, resolve_by, acknowledged_at, resolved_at,
-         closed_at, resolution, feedback_rating, feedback_comment, escalation_level, response_breached, resolution_breached, warned)
+         closed_at, resolution, feedback_rating, feedback_comment, escalation_level, response_breached, resolution_breached,
+         warned, response_warned)
        VALUES (@id, @reporterId, @title, @description, @serviceId, @impact, @urgency, @affectedUsers, @createdAt,
          @status, @category, @priority, @priorityScore, @assigneeId, @responseBy, @resolveBy, @acknowledgedAt, @resolvedAt,
-         @closedAt, @resolution, @feedbackRating, @feedbackComment, @escalationLevel, @rb, @resb, @w)
-       ON CONFLICT(id) DO UPDATE SET status=@status, category=@category, priority=@priority, priority_score=@priorityScore,
+         @closedAt, @resolution, @feedbackRating, @feedbackComment, @escalationLevel, @rb, @resb, @w, @rw)
+       ON CONFLICT(id) DO UPDATE SET title=@title, description=@description, service_id=@serviceId, impact=@impact,
+         urgency=@urgency, affected_users=@affectedUsers, status=@status, category=@category, priority=@priority, priority_score=@priorityScore,
          assignee_id=@assigneeId, response_by=@responseBy, resolve_by=@resolveBy, acknowledged_at=@acknowledgedAt,
          resolved_at=@resolvedAt, closed_at=@closedAt, resolution=@resolution, feedback_rating=@feedbackRating,
          feedback_comment=@feedbackComment, escalation_level=@escalationLevel, response_breached=@rb,
-         resolution_breached=@resb, warned=@w`,
+         resolution_breached=@resb, warned=@w, response_warned=@rw`,
     ).run({
       id: s.id, reporterId: s.reporterId, title: s.title, description: s.description, serviceId: s.serviceId,
       impact: s.impact, urgency: s.urgency, affectedUsers: s.affectedUsers, createdAt: s.createdAt, status: s.status,
       category: s.category, priority: s.priority, priorityScore: s.priorityScore, assigneeId: s.assigneeId,
       responseBy: s.responseBy, resolveBy: s.resolveBy, acknowledgedAt: s.acknowledgedAt, resolvedAt: s.resolvedAt,
       closedAt: s.closedAt, resolution: s.resolution, feedbackRating: s.feedbackRating, feedbackComment: s.feedbackComment,
-      escalationLevel: s.escalationLevel, rb: bool(s.responseBreached), resb: bool(s.resolutionBreached), w: bool(s.warned),
+      escalationLevel: s.escalationLevel, rb: bool(s.responseBreached), resb: bool(s.resolutionBreached),
+      w: bool(s.resolutionWarned), rw: bool(s.responseWarned),
     });
 
-    db.prepare("DELETE FROM incident_notes WHERE incident_id = ?").run(inc.id);
+    // Notes are append-only, so only the ones not stored yet are written.
+    const stored = (db.prepare("SELECT COUNT(*) AS n FROM incident_notes WHERE incident_id = ?").get(inc.id) as { n: number }).n;
     const note = db.prepare("INSERT INTO incident_notes (incident_id, author_id, kind, text, at) VALUES (?, ?, ?, ?, ?)");
-    inc.timeline.forEach((n) => note.run(inc.id, n.author.id, n.kind, n.text, iso(n.at)));
+    inc.timeline.slice(stored).forEach((n) => note.run(inc.id, n.author.id, n.kind, n.text, iso(n.at)));
 
     // Links reference other incidents that may not be saved yet in this request; insert only existing ones.
     db.prepare("DELETE FROM incident_links WHERE incident_id = ?").run(inc.id);
@@ -190,6 +216,16 @@ const inboxMapper: RowMapper<InboxItem> = {
   remove(db, id) { db.prepare("DELETE FROM notifications WHERE id = ?").run(id); },
 };
 
+const emailMapper: RowMapper<EmailRecord> = {
+  write(db, e) {
+    db.prepare(
+      `INSERT INTO email_outbox (id, user_id, recipient, subject, body, incident_id, at, status, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET status = excluded.status, detail = excluded.detail`,
+    ).run(e.id, e.userId, e.to, e.subject, e.body, e.incidentId, iso(e.at), e.status, e.detail);
+  },
+  remove(db, id) { db.prepare("DELETE FROM email_outbox WHERE id = ?").run(id); },
+};
+
 // --------------------------------------------------------------------------- store
 /** Opens the database, creates tables, and rebuilds the object graph from rows. */
 export class SqliteStore {
@@ -202,12 +238,14 @@ export class SqliteStore {
   readonly audit: SqliteRepository<AuditEntry>;
   readonly violations: SqliteRepository<SLAViolation>;
   readonly inbox: SqliteRepository<InboxItem>;
+  readonly emails: SqliteRepository<EmailRecord>;
 
   constructor(path: string) {
     try {
       this.db = new DatabaseSync(path);
       this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
       this.db.exec(readFileSync(join(__dirname, "..", "..", "schema.sql"), "utf8"));
+      migrate(this.db);
     } catch (e) {
       throw new PersistenceException(`Cannot open database at ${path}: ${(e as Error).message}`);
     }
@@ -219,6 +257,7 @@ export class SqliteStore {
     this.audit = new SqliteRepository(this.db, auditMapper);
     this.violations = new SqliteRepository(this.db, violationMapper);
     this.inbox = new SqliteRepository(this.db, inboxMapper);
+    this.emails = new SqliteRepository(this.db, emailMapper);
     this.load();
   }
 
@@ -250,8 +289,8 @@ export class SqliteStore {
   private load(): void {
     // 1. reference data
     this.services.hydrate(
-      this.all<{ id: string; name: string; criticality: Level; user_base: number }>("SELECT * FROM it_services")
-        .map((r) => new ITService(r.id, r.name, r.criticality, r.user_base)),
+      this.all<{ id: string; name: string; criticality: Level; user_base: number; active: number }>("SELECT * FROM it_services")
+        .map((r) => { const s = new ITService(r.id, r.name, r.criticality, r.user_base); s.setActive(!!r.active); return s; }),
     );
     const kw = this.all<{ category: string; keyword: string }>("SELECT * FROM category_keywords");
     this.categories.hydrate(
@@ -265,18 +304,21 @@ export class SqliteStore {
 
     // 2. users
     const skills = this.all<{ technician_id: string; skill: string }>("SELECT * FROM technician_skills");
-    type URow = { id: string; role: Role; name: string; email: string; password_hash: string; department: string | null; experience_years: number | null; max_active: number | null; available: number };
+    type URow = { id: string; role: Role; name: string; email: string; password_hash: string; department: string | null; experience_years: number | null; max_active: number | null; available: number; active: number };
+    const build = (r: URow): User => {
+      const pw = PasswordHash.fromStored(r.password_hash);
+      if (r.role === Role.TECHNICIAN) {
+        const t = new Technician(r.id, r.name, r.email, pw, skills.filter((s) => s.technician_id === r.id).map((s) => s.skill),
+          // Rows written by an older version may hold values today's validation rejects; clamp instead of refusing to start.
+          Math.min(60, Math.max(0, r.experience_years ?? 0)), Math.min(50, Math.max(1, Math.round(r.max_active ?? 5))));
+        t.setAvailable(!!r.available);
+        return t;
+      }
+      if (r.role === Role.ADMIN) return new Admin(r.id, r.name, r.email, pw);
+      return new Employee(r.id, r.name, r.email, pw, r.department ?? "");
+    };
     this.users.hydrate(
-      this.all<URow>("SELECT * FROM users").map((r) => {
-        const pw = PasswordHash.fromStored(r.password_hash);
-        if (r.role === Role.TECHNICIAN) {
-          const t = new Technician(r.id, r.name, r.email, pw, skills.filter((s) => s.technician_id === r.id).map((s) => s.skill), r.experience_years ?? 0, r.max_active ?? 5);
-          t.setAvailable(!!r.available);
-          return t;
-        }
-        if (r.role === Role.ADMIN) return new Admin(r.id, r.name, r.email, pw);
-        return new Employee(r.id, r.name, r.email, pw, r.department ?? "");
-      }),
+      this.all<URow>("SELECT * FROM users").map((r) => { const u = build(r); u.setActive(!!r.active); return u; }),
     );
 
     // 3. incidents (+ notes, links)
@@ -294,7 +336,7 @@ export class SqliteStore {
           resolvedAt: r.resolved_at as string | null, closedAt: r.closed_at as string | null, resolution: r.resolution as string | null,
           feedbackRating: r.feedback_rating as number | null, feedbackComment: r.feedback_comment as string | null,
           escalationLevel: r.escalation_level as number, responseBreached: !!r.response_breached,
-          resolutionBreached: !!r.resolution_breached, warned: !!r.warned,
+          resolutionBreached: !!r.resolution_breached, resolutionWarned: !!r.warned, responseWarned: !!r.response_warned,
           related: links.filter((l) => l.incident_id === r.id).map((l) => l.related_id),
         };
         return Incident.restore(s, {
@@ -311,7 +353,7 @@ export class SqliteStore {
       if (!(t instanceof Technician)) continue;
       const mine = this.incidents.findAll().filter((i) => i.assignee?.id === t.id);
       const history = new Map<string, number>();
-      mine.filter((i) => i.resolvedAt).forEach((i) => history.set(i.service.id, (history.get(i.service.id) ?? 0) + 1));
+      mine.filter((i) => i.resolvedAt && !i.isOpen).forEach((i) => history.set(i.service.id, (history.get(i.service.id) ?? 0) + 1));
       t.restoreWorkload(mine.filter((i) => i.isOpen).map((i) => i.id), history);
     }
 

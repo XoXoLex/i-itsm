@@ -4,12 +4,12 @@ import { Level, Priority } from "./domain/enums";
 import { Incident } from "./domain/Incident";
 import { User } from "./domain/users";
 import { EventBus } from "./events/EventBus";
-import { AuditLogger, NotificationDispatcher } from "./events/observers";
+import { AuditLogger, EscalationResponder, NotificationDispatcher } from "./events/observers";
 import { DuplicateDetector, KeywordCategorizer, ResolutionSuggester } from "./intelligence/intelligence";
-import { InAppChannel, InboxItem, NotificationChannel, SimulatedEmailChannel } from "./notifications/channels";
+import { EmailLog, EmailRecord, InAppChannel, InboxItem, NotificationChannel, NotificationChannelFactory } from "./notifications/channels";
 import { SqliteStore } from "./persistence/SqliteStore";
 import { InMemoryRepository } from "./repositories/Repository";
-import { AuthService } from "./services/AuthService";
+import { AuthService, LoginGuard } from "./services/AuthService";
 import { Clock, SystemClock } from "./services/Clock";
 import { IncidentService } from "./services/IncidentService";
 import { ReportService } from "./services/ReportService";
@@ -20,9 +20,10 @@ import { SkillBasedAssignment } from "./strategies/assignment/AssignmentStrategy
 import { WeightedScorePriorityStrategy } from "./strategies/priority/PriorityStrategy";
 
 export interface BuildOptions {
-  store?: SqliteStore;                 // omit for a pure in-memory system (tests)
-  categorizer?: Categorizer;           // defaults to keyword matching
-  extraChannels?: NotificationChannel[]; // e.g. real-time push, real email
+  store?: SqliteStore;                   // omit for a pure in-memory system (tests)
+  categorizer?: Categorizer;             // defaults to keyword matching
+  extraChannels?: NotificationChannel[]; // e.g. real-time push
+  email?: { resendApiKey?: string; from?: string; http?: typeof fetch }; // real email when a key is given
 }
 
 /** Composition root: the one place that wires concrete classes together. */
@@ -36,16 +37,19 @@ export function buildSystem(clock: Clock = new SystemClock(), opts: BuildOptions
   const audit = st?.audit ?? new InMemoryRepository<AuditEntry>();
   const violations = st?.violations ?? new InMemoryRepository<SLAViolation>();
   const inbox = st?.inbox ?? new InMemoryRepository<InboxItem>();
+  const emailLog = new EmailLog(st?.emails ?? new InMemoryRepository<EmailRecord>());
 
-  const inApp = new InAppChannel(inbox);
-  const email = new SimulatedEmailChannel();
+  // Channels are built by name through the factory; which email channel is used depends only on configuration.
+  const channelDeps = { inbox, emailLog, resendApiKey: opts.email?.resendApiKey, emailFrom: opts.email?.from, http: opts.email?.http };
+  const inApp = NotificationChannelFactory.create("IN_APP", channelDeps) as InAppChannel;
+  const email = NotificationChannelFactory.create(NotificationChannelFactory.emailKind(channelDeps), channelDeps);
 
   const bus = new EventBus();
   bus.subscribe(new AuditLogger(audit));
   bus.subscribe(new NotificationDispatcher([inApp, email, ...(opts.extraChannels ?? [])], users));
 
   const sla = new SLAService(policies, incidents, bus, clock, violations);
-  const auth = new AuthService(users);
+  const auth = new AuthService(users, new LoginGuard(clock));
   const incidentService = new IncidentService({
     incidents, users, services, categories, bus, clock, sla,
     priorityStrategy: new WeightedScorePriorityStrategy(),
@@ -54,10 +58,11 @@ export function buildSystem(clock: Clock = new SystemClock(), opts: BuildOptions
     duplicateDetector: new DuplicateDetector(),
     resolutionSuggester: new ResolutionSuggester(),
   });
-  const reports = new ReportService(incidents, users, audit, sla);
-  const admin = new AdminService(users, services, categories, sla);
+  bus.subscribe(new EscalationResponder(incidentService));
+  const reports = new ReportService(incidents, users, audit, sla, emailLog);
+  const admin = new AdminService(users, services, categories, sla, auth, incidentService);
 
-  return { users, incidents, services, categories, policies, audit, inApp, email, bus, sla, auth, incidentService, reports, admin, clock, store: st };
+  return { users, incidents, services, categories, policies, audit, inApp, email, emailLog, bus, sla, auth, incidentService, reports, admin, clock, store: st };
 }
 
 export type ItsmSystem = ReturnType<typeof buildSystem>;
@@ -73,7 +78,7 @@ export function seed(sys: ItsmSystem) {
 
   const cats: [string, string[]][] = [
     ["HARDWARE", ["laptop", "printer", "monitor", "keyboard", "mouse", "hardware", "screen", "battery"]],
-    ["SOFTWARE", ["install", "license", "update", "crash", "software", "excel", "word", "outlook"]],
+    ["SOFTWARE", ["install", "license", "update", "crash", "software", "excel", "word", "outlook", "email", "mail", "mailbox", "calendar"]],
     ["NETWORK", ["wifi", "network", "internet", "vpn", "slow", "latency", "router", "connection", "dns"]],
     ["DATABASE", ["database", "query", "sql", "db", "table", "deadlock", "replica"]],
     ["CLOUD", ["aws", "azure", "cloud", "server", "instance", "kubernetes", "container"]],
@@ -98,10 +103,10 @@ export function seed(sys: ItsmSystem) {
   const admin = sys.auth.bootstrapAdmin("Priya Admin", "admin@itsm.local", "admin1234");
   const pw = "tech12345";
   const techs = {
-    t1: sys.auth.createStaff(admin, "TECHNICIAN", { name: "Rahul (App/DB)", email: "rahul@itsm.local", password: pw, skills: ["APPLICATION", "DATABASE"], experienceYears: 6 }),
-    t2: sys.auth.createStaff(admin, "TECHNICIAN", { name: "Sneha (Network)", email: "sneha@itsm.local", password: pw, skills: ["NETWORK", "SECURITY", "AUTHENTICATION"], experienceYears: 4 }),
-    t3: sys.auth.createStaff(admin, "TECHNICIAN", { name: "Arjun (App/Cloud)", email: "arjun@itsm.local", password: pw, skills: ["APPLICATION", "CLOUD"], experienceYears: 2, maxActive: 2 }),
-    t4: sys.auth.createStaff(admin, "TECHNICIAN", { name: "Meera (Desktop)", email: "meera@itsm.local", password: pw, skills: ["HARDWARE", "SOFTWARE", "STORAGE"], experienceYears: 3 }),
+    t1: sys.admin.addStaff(admin, "TECHNICIAN", { name: "Rahul (App/DB)", email: "rahul@itsm.local", password: pw, skills: ["APPLICATION", "DATABASE"], experienceYears: 6 }),
+    t2: sys.admin.addStaff(admin, "TECHNICIAN", { name: "Sneha (Network)", email: "sneha@itsm.local", password: pw, skills: ["NETWORK", "SECURITY", "AUTHENTICATION"], experienceYears: 4 }),
+    t3: sys.admin.addStaff(admin, "TECHNICIAN", { name: "Arjun (App/Cloud)", email: "arjun@itsm.local", password: pw, skills: ["APPLICATION", "CLOUD"], experienceYears: 2, maxActive: 2 }),
+    t4: sys.admin.addStaff(admin, "TECHNICIAN", { name: "Meera (Desktop)", email: "meera@itsm.local", password: pw, skills: ["HARDWARE", "SOFTWARE", "STORAGE"], experienceYears: 3 }),
   };
   const employees = {
     e1: sys.auth.registerEmployee("Ankit Sharma", "ankit@corp.local", "employee1", "Finance"),

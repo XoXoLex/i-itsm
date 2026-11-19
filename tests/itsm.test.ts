@@ -67,7 +67,9 @@ test("TC04 notifications go out on both channels (in-app + email)", async () => 
   const { pay, sys, employees } = setup();
   await pay();
   assert.ok(sys.inApp.inboxOf(employees.e1.id).length >= 2);
-  assert.ok(sys.email.outbox.some((n) => n.recipient.id === employees.e1.id && n.subject.includes("created")));
+  const mail = sys.emailLog.recent().find((e) => e.userId === employees.e1.id && e.subject.includes("created"));
+  assert.equal(mail?.to, "ankit@corp.local");
+  assert.equal(mail?.status, "SIMULATED"); // logged, not sent: no mail provider configured in tests
 });
 
 test("TC05 search with five combined criteria", async () => {
@@ -133,11 +135,14 @@ test("TC11 unacknowledged P1 → response breach + automatic escalation", async 
 });
 
 test("TC12 technician at max workload is skipped; overload throws", async () => {
-  const { techs } = setup();
-  const arjun = techs.t3 as Technician; // max 2
-  arjun.takeIncident("X1"); arjun.takeIncident("X2");
-  assert.equal(arjun.canTakeMore(), false);
-  assert.throws(() => arjun.takeIncident("X3"), TechnicianWorkloadExceededException);
+  const { techs, pay } = setup();
+  const rahul = techs.t1 as Technician; // max 5, normally first choice for APPLICATION
+  for (let k = 0; k < rahul.maxActiveIncidents; k++) rahul.takeIncident(`X${k}`);
+  assert.equal(rahul.canTakeMore(), false);
+  const inc = await pay();
+  assert.equal(inc.assignee!.id, techs.t3.id); // skipped: goes to Arjun, the other APPLICATION technician
+  assert.throws(() => rahul.takeIncident("X99"), TechnicianWorkloadExceededException);
+  assert.equal(rahul.workload, 5);
 });
 
 // ---------- invalid input / exceptions ----------
@@ -167,10 +172,17 @@ test("TC15 missing SLA configuration is reported clearly", async () => {
   assert.equal(sys.incidents.count(), 0); // nothing half-saved
 });
 
-test("TC16 database failure surfaces as PersistenceException", async () => {
-  const { sys, pay } = setup();
-  sys.incidents.simulateFailureOnNextCall();
-  await assert.rejects(() => pay(), PersistenceException);
+test("TC16 database failure surfaces as PersistenceException and nothing is half-saved", async () => {
+  const path = join(mkdtempSync(join(tmpdir(), "itsm-")), "fail.db");
+  const store = new SqliteStore(path);
+  const sys = buildSystem(new FakeClock(new Date("2026-11-20T10:00:00Z")), { store });
+  const d = seed(sys);
+  store.db.close(); // the database goes away underneath the running system
+  await assert.rejects(
+    () => sys.incidentService.report(d.employees.e1, { title: "Payment application unavailable", description: "Users unable to complete transactions", serviceId: d.svc.payment.id, impact: 4, urgency: 4, affectedUsers: 10 }),
+    PersistenceException,
+  );
+  assert.equal(sys.incidents.count(), 0); // the failed write did not reach the in-memory identity map either
 });
 
 // ---------- authentication / authorization ----------
@@ -196,7 +208,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-test("TC19 data survives a restart (SQLite): state, notes, links, workload, audit, IDs", async () => {
+test("TC19 data survives a restart (SQLite): state, notes, links, workload, escalation, audit, IDs", async () => {
   const path = join(mkdtempSync(join(tmpdir(), "itsm-")), "test.db");
   const clock = new FakeClock(new Date("2026-11-20T10:00:00Z"));
 
@@ -221,7 +233,12 @@ test("TC19 data survives a restart (SQLite): state, notes, links, workload, audi
   assert.equal(a2.timeline[0].text, "Gateway pods crash-looping");
   assert.deepEqual(a2.related, [b.id]);
   assert.deepEqual(s2.incidents.findById(b.id)!.related, [a.id]);
-  assert.equal((s2.users.findById(tech.id) as Technician).workload, 2);
+  // b sat unacknowledged for 10 minutes: escalated two rungs and handed to another technician. All of that was stored.
+  const b2 = s2.incidents.findById(b.id)!;
+  assert.equal(b2.escalationLevel, 2);
+  assert.notEqual(b2.assignee!.id, tech.id);
+  assert.equal((s2.users.findById(tech.id) as Technician).workload, 1);
+  assert.equal(b2.assignee!.workload, 1);
   assert.equal(s2.audit.count(), auditCount);
   assert.ok(s2.sla.violations.length >= 1);
   assert.ok(s2.inApp.inboxOf(d.employees.e1.id).length > 0);

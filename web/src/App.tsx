@@ -5,7 +5,7 @@ import { IncidentList } from "./IncidentList";
 import { IncidentView } from "./IncidentView";
 import { Login } from "./Login";
 import { ReportForm } from "./ReportForm";
-import { AuditLog, People, Settings } from "./Admin";
+import { Account, AuditLog, EmailLog, People, Settings } from "./Admin";
 import { ToastHost, useLoad, useRoute, useToast } from "./ui";
 
 type NavItem = { to: string; label: string };
@@ -28,6 +28,7 @@ const NAV: Record<User["role"], NavItem[]> = {
     { to: "/people", label: "People" },
     { to: "/settings", label: "Settings" },
     { to: "/audit", label: "Audit log" },
+    { to: "/emails", label: "Email log" },
   ],
 };
 
@@ -60,7 +61,10 @@ function Shell({ me, onLogout }: { me: User; onLogout: () => void }) {
     (n) => toast(`${n.subject.replace(/^\[(\w+)\]\s*/, "$1: ")}`, "info"),
   ), [toast]);
 
-  const path = route.split("?")[0];
+  const [path, query = ""] = route.split("?");
+  // Links such as #/all?status=VERIFIED open the list with those filters already applied.
+  const q = new URLSearchParams(query);
+  const initial = { status: q.get("status") ?? "", priority: q.get("priority") ?? "", openOnly: q.get("openOnly") === "true" };
   const incidentMatch = path.match(/^\/incidents\/([\w-]+)$/);
   const nav = NAV[me.role];
 
@@ -68,9 +72,11 @@ function Shell({ me, onLogout }: { me: User; onLogout: () => void }) {
   if (!meta) page = <div className="page"><p className="muted">Loading…</p></div>;
   else if (incidentMatch) page = <IncidentView id={incidentMatch[1]} me={me} meta={meta} refreshKey={refreshKey} />;
   else if (path === "/report") page = <ReportForm meta={meta} go={go} />;
-  else if (me.role === "ADMIN" && path === "/all") page = <IncidentList me={me} meta={meta} refreshKey={refreshKey} title="All incidents" />;
+  else if (path === "/account") page = <Account me={me} />;
+  else if (me.role === "ADMIN" && path === "/all") page = <IncidentList key={route} me={me} meta={meta} refreshKey={refreshKey} title="All incidents" initial={initial} />;
+  else if (me.role === "ADMIN" && path === "/emails") page = <EmailLog refreshKey={refreshKey} meta={meta} />;
   else if (me.role === "ADMIN" && path === "/settings") page = <Settings meta={meta} reloadMeta={() => setMetaTick((t) => t + 1)} />;
-  else if (me.role === "ADMIN" && path === "/people") page = <People refreshKey={refreshKey} reloadMeta={() => setMetaTick((t) => t + 1)} />;
+  else if (me.role === "ADMIN" && path === "/people") page = <People me={me} meta={meta} refreshKey={refreshKey} reloadMeta={() => setMetaTick((t) => t + 1)} />;
   else if (me.role === "ADMIN" && path === "/audit") page = <AuditLog refreshKey={refreshKey} />;
   else if (me.role === "ADMIN") page = <Dashboard refreshKey={refreshKey} />;
   else page = <IncidentList me={me} meta={meta} refreshKey={refreshKey} title={me.role === "TECHNICIAN" ? "My queue" : "My incidents"} />;
@@ -90,7 +96,7 @@ function Shell({ me, onLogout }: { me: User; onLogout: () => void }) {
         </ul>
         <div className="rail-foot">
           <Inbox me={me} refreshKey={refreshKey} />
-          <p className="rail-user">{me.name}<span>{me.email}</span></p>
+          <p className="rail-user">{me.name}<span>{me.email}</span><a href="#/account">Change password</a></p>
           <button className="btn btn-rail" onClick={onLogout}>Sign out</button>
         </div>
       </nav>

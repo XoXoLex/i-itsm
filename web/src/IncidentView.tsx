@@ -1,6 +1,6 @@
-import { ReactNode, useState } from "react";
+import { FormEvent, ReactNode, useState } from "react";
 import { api, fmtTime, IncidentDetail, Meta, STATUS_LABEL, titleCase, User } from "./api";
-import { Empty, Field, Lifecycle, PriorityTag, SlaFuse, StatusText, useAction, useLoad, useNow } from "./ui";
+import { Empty, Field, Lifecycle, PriorityTag, SlaFuse, StatusText, useAction, useLoad, useNow, useToast } from "./ui";
 
 export function IncidentView({ id, me, meta, refreshKey }: { id: string; me: User; meta: Meta; refreshKey: number }) {
   const { data: inc, error, reload } = useLoad(() => api<IncidentDetail>(`/incidents/${id}`), [id, refreshKey]);
@@ -37,9 +37,15 @@ export function IncidentView({ id, me, meta, refreshKey }: { id: string; me: Use
               <p className="muted small">
                 Respond by {fmtTime(inc.sla.responseBy)}{inc.acknowledgedAt ? ` (acknowledged ${fmtTime(inc.acknowledgedAt)})` : ""}. Resolve by {fmtTime(inc.sla.resolveBy)}.
                 {inc.sla.responseBreached && <strong className="danger"> Response target missed.</strong>}
-                {inc.escalatedTo && <strong className="danger"> Escalated to {titleCase(inc.escalatedTo)}.</strong>}
+                {inc.sla.resolutionBreached && <strong className="danger"> Resolution target missed.</strong>}
               </p>
             </div>
+            {inc.escalatedTo && inc.isOpen && (
+              <p className="callout callout-error">
+                <strong>Escalated to the {titleCase(inc.escalatedTo).toLowerCase()}</strong> (level {inc.escalationLevel} of 3) because a deadline has passed.
+                {me.role === "ADMIN" ? " The audit trail below shows each step and who was told." : ""}
+              </p>
+            )}
             <p className="desc">{inc.description}</p>
             <dl className="facts">
               <div><dt>Category</dt><dd>{inc.category ? titleCase(inc.category) : "—"}</dd></div>
@@ -101,6 +107,7 @@ export function IncidentView({ id, me, meta, refreshKey }: { id: string; me: Use
 
         <aside className="stack">
           <Actions inc={inc} me={me} meta={meta} reload={reload} isAssignee={isAssignee} isReporter={isReporter} isAdmin={isAdmin} />
+          {inc.canEdit && <EditDetails key={`${inc.id}-${inc.priority}-${inc.status}`} inc={inc} meta={meta} reload={reload} />}
           {inc.suggestions && inc.isOpen && (
             <section className="panel">
               <h2 className="h2">Fixes that worked before</h2>
@@ -109,7 +116,7 @@ export function IncidentView({ id, me, meta, refreshKey }: { id: string; me: Use
                   {inc.suggestions.map((s) => (
                     <li key={s.from}>
                       <p>{s.resolution}</p>
-                      <p className="muted small">From <a href={`#/incidents/${s.from}`}>{s.from}</a>, {Math.round(s.similarity * 100)}% similar</p>
+                      <p className="muted small">From {s.canOpen ? <a href={`#/incidents/${s.from}`}>{s.from}</a> : s.from}, {Math.round(s.similarity * 100)}% similar</p>
                     </li>
                   ))}
                 </ul>
@@ -159,22 +166,24 @@ function Actions(props: { inc: IncidentDetail; me: User; meta: Meta; reload: () 
     blocks.push(box("ask", "Ask the reporter", "Question for the reporter (pauses until they reply)", "Send question", "request-info", "Question sent"));
   }
   if ((isReporter || isAdmin) && s === "PENDING_INFO") blocks.push(box("reply", "Reply to the technician", "Your answer", "Send reply", "provide-info", "Reply sent", true));
-  if (isReporter && inc.isOpen && s !== "PENDING_INFO") blocks.push(box("info", "Add information", "Anything the technician should know", "Add to incident", "provide-info", "Information added"));
+  if (isReporter && !isAssignee && inc.isOpen && s !== "PENDING_INFO") blocks.push(box("info", "Add information", "Anything the technician should know", "Add to incident", "provide-info", "Information added"));
+  const fixedItThemselves = isAssignee && !isAdmin; // whoever resolved it cannot also confirm the fix
   if ((isReporter || isAdmin) && s === "RESOLVED") {
-    blocks.push(<button key="verify" className="btn btn-primary" disabled={busy} onClick={() => post("verify", "Fix confirmed")}>Confirm it's fixed</button>);
+    if (fixedItThemselves) blocks.push(<p key="selfverify" className="muted small">You resolved this one yourself, so an administrator has to confirm the fix.</p>);
+    else blocks.push(<button key="verify" className="btn btn-primary" disabled={busy} onClick={() => post("verify", "Fix confirmed")}>Confirm it's fixed</button>);
     blocks.push(box("reopen", "Still broken?", "What is still wrong", "Reopen incident", "reopen", "Incident reopened"));
   }
   if (isAdmin && s === "VERIFIED") blocks.push(<button key="close" className="btn btn-primary" disabled={busy} onClick={() => post("close", "Incident closed")}>Close incident</button>);
   if ((isReporter || isAdmin) && s === "VERIFIED") blocks.push(box("reopen", "Still broken?", "What is still wrong", "Reopen incident", "reopen", "Incident reopened"));
-  if (isAdmin && ["CLASSIFIED", "ASSIGNED", "ACKNOWLEDGED"].includes(s)) blocks.push(
+  if (isAdmin && inc.isOpen && s !== "NEW") blocks.push(
     <div key="assign" className="stack-s">
-      <Field label={inc.assignee ? "Reassign" : "Assign"}>
+      <Field label={inc.assignee ? "Reassign" : "Assign"} hint={inc.assignee && !["CLASSIFIED", "ASSIGNED"].includes(s) ? "The new technician has to acknowledge it again." : undefined}>
         <select value={tech} onChange={(e) => setTech(e.target.value)}>
           <option value="">Pick automatically ({titleCase(meta.strategies.assignment)})</option>
-          {meta.technicians.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          {meta.technicians.filter((t) => t.id !== inc.assignee?.id).map((t) => <option key={t.id} value={t.id} disabled={!t.available}>{t.name}{t.available ? "" : " (away)"}</option>)}
         </select>
       </Field>
-      <button className="btn" disabled={busy} onClick={() => post("assign", "Technician assigned", { technicianId: tech || undefined })}>Assign</button>
+      <button className="btn" disabled={busy} onClick={() => post("assign", "Technician assigned", { technicianId: tech || undefined })}>{inc.assignee ? "Reassign" : "Assign"}</button>
     </div>,
   );
   if (isReporter && !inc.isOpen && !inc.feedback) blocks.push(
@@ -197,10 +206,74 @@ function Actions(props: { inc: IncidentDetail; me: User; meta: Meta; reload: () 
   );
 }
 
+const LEVELS = ["", "Low", "Medium", "High", "Critical"];
+
+/** Correct what the reporter told us. Priority and the deadlines are recalculated on the server from the new facts. */
+function EditDetails({ inc, meta, reload }: { inc: IncidentDetail; meta: Meta; reload: () => void }) {
+  const { run, busy } = useAction();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const start = { title: inc.title, description: inc.description, serviceId: inc.service.id, category: inc.category ?? "", impact: inc.impact, urgency: inc.urgency, affectedUsers: inc.affectedUsers };
+  const [f, setF] = useState(start);
+  const changed = Object.fromEntries(Object.entries(f).filter(([k, v]) => v !== start[k as keyof typeof start]));
+  const service = meta.services.find((s) => s.id === f.serviceId);
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    const r = await run(() => api<IncidentDetail>(`/incidents/${inc.id}`, { method: "PATCH", body: changed }));
+    if (!r) return;
+    toast(r.priority !== inc.priority ? `Saved. Priority changed from ${inc.priority} to ${r.priority}, deadlines updated.` : "Changes saved");
+    setOpen(false);
+    reload();
+  }
+
+  if (!open) {
+    return (
+      <section className="panel">
+        <h2 className="h2">Details wrong?</h2>
+        <p className="muted small">Correct the impact, urgency, service or wording after triage. Priority and deadlines are recalculated.</p>
+        <button className="btn" onClick={() => setOpen(true)}>Edit incident</button>
+      </section>
+    );
+  }
+  return (
+    <section className="panel">
+      <h2 className="h2">Edit incident</h2>
+      <form className="stack" onSubmit={save}>
+        <Field label="Title"><input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} required minLength={5} maxLength={200} /></Field>
+        <Field label="Details"><textarea rows={3} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} required minLength={10} /></Field>
+        <Field label="Affected service">
+          <select value={f.serviceId} onChange={(e) => setF({ ...f, serviceId: e.target.value })}>
+            {meta.services.filter((s) => s.active || s.id === inc.service.id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Category">
+          <select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
+            {!meta.categories.some((c) => c.name === f.category) && <option value={f.category}>{titleCase(f.category)} (removed)</option>}
+            {meta.categories.map((c) => <option key={c.name} value={c.name}>{titleCase(c.name)}</option>)}
+          </select>
+        </Field>
+        <div className="grid-2">
+          <Field label="Impact"><select value={f.impact} onChange={(e) => setF({ ...f, impact: Number(e.target.value) })}>{[1, 2, 3, 4].map((l) => <option key={l} value={l}>{LEVELS[l]}</option>)}</select></Field>
+          <Field label="Urgency"><select value={f.urgency} onChange={(e) => setF({ ...f, urgency: Number(e.target.value) })}>{[1, 2, 3, 4].map((l) => <option key={l} value={l}>{LEVELS[l]}</option>)}</select></Field>
+        </div>
+        <Field label="People affected" hint={service ? `${service.name} has ${service.userBase} users` : undefined}>
+          <input type="number" min={1} max={service?.userBase} step={1} value={f.affectedUsers} onChange={(e) => setF({ ...f, affectedUsers: Math.round(Number(e.target.value)) || 1 })} />
+        </Field>
+        <div className="row gap">
+          <button className="btn btn-primary" disabled={busy || Object.keys(changed).length === 0}>Save changes</button>
+          <button type="button" className="btn" onClick={() => { setF(start); setOpen(false); }}>Cancel</button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function waitingText(inc: IncidentDetail, isAssignee: boolean, isReporter: boolean): string {
   if (inc.status === "CLOSED") return "This incident is closed.";
   if (inc.status === "PENDING_INFO") return isAssignee ? "Waiting for the reporter to reply." : "Waiting for the reporter.";
   if (inc.status === "RESOLVED") return "Waiting for the reporter to confirm the fix.";
+  if (inc.status === "CLASSIFIED") return isReporter ? "Waiting for a technician to become free. The desk has been told." : "Waiting for a technician.";
   if (inc.status === "VERIFIED") return "Fix confirmed. An administrator will close it.";
   if (isReporter) return inc.assignee ? `${inc.assignee.name} is working on it.` : "Waiting for a technician.";
   return "Nothing for you to do here.";

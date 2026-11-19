@@ -47,7 +47,7 @@ S.close(admin, pay.id);
 S.feedback(employees.e1, pay.id, 5, "Fixed quickly");
 show(pay.id);
 console.log("\nEmails sent to reporter:");
-sys.email.outbox.filter((n) => n.recipient.id === employees.e1.id).forEach((n) => console.log(`  → ${n.recipient.email}: ${n.subject}`));
+sys.emailLog.recent().filter((e) => e.userId === employees.e1.id).reverse().forEach((e) => console.log(`  → ${e.to}: ${e.subject} [${e.status}]`));
 
 // ---------------------------------------------------------------- Workflow 3
 h("WORKFLOW 3: multiple reports → duplicates detected → SLA breach → auto-escalation");

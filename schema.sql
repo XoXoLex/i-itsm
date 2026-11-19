@@ -9,8 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash    TEXT NOT NULL,            -- salt:scrypt-hash, never plain text
   department       TEXT,                     -- employees only
   experience_years INTEGER,                  -- technicians only
-  max_active       INTEGER,                  -- technicians only
-  available        INTEGER NOT NULL DEFAULT 1
+  max_active       INTEGER CHECK (max_active IS NULL OR max_active >= 1),  -- technicians only
+  available        INTEGER NOT NULL DEFAULT 1,  -- technicians: accepting new work
+  active           INTEGER NOT NULL DEFAULT 1   -- 0 = deactivated: history kept, access removed
 );
 
 CREATE TABLE IF NOT EXISTS technician_skills (
@@ -23,7 +24,8 @@ CREATE TABLE IF NOT EXISTS it_services (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
   criticality INTEGER NOT NULL CHECK (criticality BETWEEN 1 AND 4),
-  user_base   INTEGER NOT NULL CHECK (user_base > 0)
+  user_base   INTEGER NOT NULL CHECK (user_base > 0),
+  active      INTEGER NOT NULL DEFAULT 1    -- 0 = retired: kept on old incidents, not offered for new ones
 );
 
 CREATE TABLE IF NOT EXISTS categories (
@@ -54,9 +56,10 @@ CREATE TABLE IF NOT EXISTS incidents (
   urgency             INTEGER NOT NULL CHECK (urgency BETWEEN 1 AND 4),
   affected_users      INTEGER NOT NULL CHECK (affected_users >= 1),
   created_at          TEXT NOT NULL,
-  status              TEXT NOT NULL,
-  category            TEXT,
-  priority            TEXT,
+  status              TEXT NOT NULL CHECK (status IN ('NEW', 'CLASSIFIED', 'ASSIGNED', 'ACKNOWLEDGED', 'IN_PROGRESS',
+                                                      'PENDING_INFO', 'RESOLVED', 'VERIFIED', 'CLOSED')),
+  category            TEXT,                 -- a name, not a foreign key: an incident keeps its category if it is later removed
+  priority            TEXT CHECK (priority IS NULL OR priority IN ('P1', 'P2', 'P3', 'P4')),
   priority_score      INTEGER NOT NULL DEFAULT 0,
   assignee_id         TEXT REFERENCES users (id),
   response_by         TEXT,
@@ -70,12 +73,13 @@ CREATE TABLE IF NOT EXISTS incidents (
   escalation_level    INTEGER NOT NULL DEFAULT 0,
   response_breached   INTEGER NOT NULL DEFAULT 0,
   resolution_breached INTEGER NOT NULL DEFAULT 0,
-  warned              INTEGER NOT NULL DEFAULT 0
+  warned              INTEGER NOT NULL DEFAULT 0,   -- resolution-deadline warning already sent
+  response_warned     INTEGER NOT NULL DEFAULT 0    -- response-deadline warning already sent
 );
+-- The running application reads from its in-memory identity map, so these indexes are for
+-- anyone querying the file directly (reports, a future SQL-backed read path), not for the app today.
 CREATE INDEX IF NOT EXISTS idx_incidents_status   ON incidents (status);
-CREATE INDEX IF NOT EXISTS idx_incidents_priority ON incidents (priority);
 CREATE INDEX IF NOT EXISTS idx_incidents_assignee ON incidents (assignee_id);
-CREATE INDEX IF NOT EXISTS idx_incidents_service  ON incidents (service_id);
 CREATE INDEX IF NOT EXISTS idx_incidents_created  ON incidents (created_at);
 
 CREATE TABLE IF NOT EXISTS incident_notes (
@@ -112,7 +116,7 @@ CREATE TABLE IF NOT EXISTS sla_violations (
   kind        TEXT NOT NULL CHECK (kind IN ('RESPONSE', 'RESOLUTION')),
   deadline    TEXT NOT NULL,
   detected_at TEXT NOT NULL,
-  priority    TEXT NOT NULL
+  priority    TEXT NOT NULL CHECK (priority IN ('P1', 'P2', 'P3', 'P4'))
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -125,6 +129,19 @@ CREATE TABLE IF NOT EXISTS notifications (
   read        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id);
+
+-- Every email the system sent or simulated, with what became of it.
+CREATE TABLE IF NOT EXISTS email_outbox (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  recipient   TEXT NOT NULL,
+  subject     TEXT NOT NULL,
+  body        TEXT NOT NULL,
+  incident_id TEXT NOT NULL,
+  at          TEXT NOT NULL,
+  status      TEXT NOT NULL CHECK (status IN ('SIMULATED', 'QUEUED', 'SENT', 'FAILED')),
+  detail      TEXT NOT NULL DEFAULT ''
+);
 
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,

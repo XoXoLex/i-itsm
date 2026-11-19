@@ -1,6 +1,6 @@
 import { Incident } from "../../domain/Incident";
 import { Technician } from "../../domain/users";
-import { TechnicianUnavailableException } from "../../exceptions/errors";
+import { InvalidInputException, TechnicianUnavailableException } from "../../exceptions/errors";
 
 /** STRATEGY PATTERN: interchangeable technician-selection algorithms. */
 export interface AssignmentStrategy {
@@ -70,8 +70,8 @@ export class AssignmentStrategyFactory {
   };
 
   static create(name: string): AssignmentStrategy {
-    const make = this.registry[name.toUpperCase()];
-    if (!make) throw new Error(`Unknown assignment strategy ${name}. Options: ${this.available().join(", ")}`);
+    const make = this.registry[String(name).toUpperCase()];
+    if (!make) throw new InvalidInputException(`Unknown assignment strategy ${name}. Options: ${this.available().join(", ")}`);
     return make();
   }
 

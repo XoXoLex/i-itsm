@@ -3,7 +3,7 @@ export type Priority = "P1" | "P2" | "P3" | "P4";
 export type SlaStatus = "ON_TRACK" | "AT_RISK" | "BREACHED" | "MET";
 
 export interface User {
-  id: string; name: string; email: string; role: Role; department?: string;
+  id: string; name: string; email: string; role: Role; active: boolean; department?: string;
   skills?: string[]; experienceYears?: number; workload?: number; maxActive?: number; available?: boolean;
 }
 
@@ -12,7 +12,7 @@ export interface Incident {
   category: string | null; priority: Priority | null; priorityScore: number;
   impact: number; impactLabel: string; urgency: number; urgencyLabel: string; affectedUsers: number;
   createdAt: string;
-  service: { id: string; name: string; criticality: string };
+  service: { id: string; name: string; criticality: string; userBase: number };
   reporter: { id: string; name: string };
   assignee: { id: string; name: string } | null;
   sla: { responseBy: string | null; resolveBy: string | null; status: SlaStatus; responseBreached: boolean; resolutionBreached: boolean };
@@ -23,8 +23,9 @@ export interface Incident {
 
 export interface IncidentDetail extends Incident {
   timeline: { author: { id: string; name: string; role: Role }; kind: string; text: string; at: string }[];
+  canEdit: boolean;
   audit?: AuditEntry[];
-  suggestions?: { from: string; resolution: string; similarity: number }[];
+  suggestions?: { from: string; resolution: string; similarity: number; canOpen: boolean }[];
 }
 
 export interface AuditEntry {
@@ -33,15 +34,19 @@ export interface AuditEntry {
 }
 
 export interface Meta {
-  services: { id: string; name: string; criticality: number; userBase: number }[];
+  services: Service[];
   categories: { name: string; keywords: string[] }[];
   levels: { value: number; label: string }[];
   statuses: string[]; priorities: Priority[]; slaStatuses: SlaStatus[];
-  technicians: { id: string; name: string }[];
+  technicians: { id: string; name: string; available: boolean }[];
   slaPolicies: { priority: Priority; responseMinutes: number; resolutionMinutes: number }[];
   strategies: { priority: string; assignment: string; assignmentOptions: string[]; priorityOptions: string[] };
   categorizer: string;
+  emailChannel: "EMAIL_SIMULATED" | "EMAIL_RESEND";
 }
+
+export interface Service { id: string; name: string; criticality: number; userBase: number; active: boolean }
+export interface EmailEntry { id: string; to: string; subject: string; body: string; incidentId: string; at: string; status: "SIMULATED" | "QUEUED" | "SENT" | "FAILED"; detail: string }
 
 export interface InboxItem { id: string; subject: string; body: string; incidentId: string; at: string; read: boolean }
 
@@ -71,14 +76,51 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return data as T;
 }
 
-/** Subscribes to server-sent events; returns an unsubscribe function. */
-export function subscribe(onIncident: (e: { id: string; type: string }) => void, onNotify: (n: { subject: string; body: string; incidentId: string }) => void) {
-  if (!token) return () => {};
-  const es = new EventSource(`/api/events?token=${encodeURIComponent(token)}`);
-  es.addEventListener("incident", (e) => onIncident(JSON.parse((e as MessageEvent).data)));
-  es.addEventListener("notification", (e) => onNotify(JSON.parse((e as MessageEvent).data)));
-  return () => es.close();
+type LiveHandlers = {
+  incident: (e: { id: string; type: string }) => void;
+  notification: (n: { subject: string; body: string; incidentId: string }) => void;
+};
+
+/**
+ * Subscribes to the server's event stream; returns an unsubscribe function.
+ * The stream is read with fetch rather than EventSource so the token goes in the
+ * Authorization header and never appears in a URL, a log or the browser history.
+ */
+export function subscribe(onIncident: LiveHandlers["incident"], onNotify: LiveHandlers["notification"]) {
+  const ctrl = new AbortController();
+  const handlers: Record<string, (data: never) => void> = { incident: onIncident, notification: onNotify };
+
+  (async () => {
+    while (!ctrl.signal.aborted && token) {
+      try {
+        const res = await fetch("/api/events", { headers: { Authorization: `Bearer ${token}` }, signal: ctrl.signal });
+        if (res.status === 401) return; // signed out or session expired: the next API call handles it
+        if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
+        const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+        let buffer = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += value;
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
+          for (const frame of frames) {
+            const event = /^event: (.+)$/m.exec(frame)?.[1];
+            const data = /^data: (.+)$/m.exec(frame)?.[1];
+            if (event && data && handlers[event]) handlers[event](JSON.parse(data) as never);
+          }
+        }
+      } catch {
+        if (ctrl.signal.aborted) return;
+      }
+      await new Promise((r) => setTimeout(r, 3000)); // dropped connection: try again shortly
+    }
+  })();
+  return () => ctrl.abort();
 }
+
+/** Start or end of a calendar day in the viewer's own time zone, as an ISO instant the server can compare. */
+export const dayBoundary = (date: string, end = false) => (date ? new Date(`${date}T${end ? "23:59:59.999" : "00:00:00"}`).toISOString() : "");
 
 // ---------- formatting helpers ----------
 export const fmtTime = (iso: string | null) =>

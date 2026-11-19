@@ -15,6 +15,16 @@ export class InvalidLoginException extends ItsmError {
   constructor() { super("Invalid email or password"); }
 }
 
+export class AccountDisabledException extends ItsmError {
+  readonly httpStatus = 403;
+  constructor() { super("This account has been deactivated. Ask an administrator to restore it."); }
+}
+
+export class TooManyAttemptsException extends ItsmError {
+  readonly httpStatus = 429;
+  constructor(minutes: number) { super(`Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`); }
+}
+
 export class AuthenticationRequiredException extends ItsmError {
   readonly httpStatus = 401;
   constructor(reason = "Please log in") { super(reason); }

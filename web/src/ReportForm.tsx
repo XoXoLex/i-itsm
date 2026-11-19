@@ -11,6 +11,7 @@ export function ReportForm({ meta, go }: { meta: Meta; go: (to: string) => void 
   const [f, setF] = useState({ title: "", description: "", serviceId: "", impact: 2, urgency: 2, affectedUsers: 1, category: "" });
   const [result, setResult] = useState<Result | null>(null);
   const { run, busy } = useAction();
+  const service = meta.services.find((s) => s.id === f.serviceId);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -62,7 +63,7 @@ export function ReportForm({ meta, go }: { meta: Meta; go: (to: string) => void 
           <Field label="Affected service">
             <select value={f.serviceId} onChange={(e) => setF({ ...f, serviceId: e.target.value })} required>
               <option value="">Choose a service</option>
-              {meta.services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {meta.services.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
           <Field label="Category" hint={`Leave on automatic and the desk will classify it (${meta.categorizer.startsWith("GEMINI") ? "Gemini AI" : "keyword"} classifier)`}>
@@ -88,8 +89,8 @@ export function ReportForm({ meta, go }: { meta: Meta; go: (to: string) => void 
             </label>
           ))}
         </fieldset>
-        <Field label="Roughly how many people are affected?">
-          <input type="number" min={1} value={f.affectedUsers} onChange={(e) => setF({ ...f, affectedUsers: Math.max(1, Number(e.target.value)) })} />
+        <Field label="Roughly how many people are affected?" hint={service ? `${service.name} has ${service.userBase} users` : undefined}>
+          <input type="number" min={1} max={service?.userBase} step={1} value={f.affectedUsers} onChange={(e) => setF({ ...f, affectedUsers: Math.max(1, Math.round(Number(e.target.value)) || 1) })} />
         </Field>
         <p className="muted small">Priority is worked out from these answers and how critical the service is. P1 ({PRIORITY_LABEL.P1}) gets a technician within {meta.slaPolicies.find((p) => p.priority === "P1")?.responseMinutes ?? 5} minutes.</p>
         <button className="btn btn-primary" disabled={busy}>{busy ? "Filing…" : "Report problem"}</button>

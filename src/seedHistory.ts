@@ -39,12 +39,12 @@ export async function seedWithHistory(sys: ItsmSystem, clock: FakeClock, realNow
     const [title, description, serviceId, impact, urgency, affectedUsers, resolution] = HISTORY[k];
     clock.advanceMinutes(420 + (k % 4) * 60); // spread over ~9 days
     const { incident } = await S.report(emps[k % emps.length], { title, description, serviceId, impact, urgency, affectedUsers });
-    const tech = incident.assignee;
-    if (!tech) continue;
+    if (!incident.assignee) continue;
 
     const breach = k % 5 === 2; // every 5th incident blows its SLA
     clock.advanceMinutes(breach ? 40 : 3 + (k % 4));
-    sys.sla.checkAll();
+    sys.sla.checkAll(); // a breached incident may be escalated and handed to another technician here
+    const tech = incident.assignee;
     S.acknowledge(tech, incident.id);
     S.startWork(tech, incident.id);
     S.addInvestigationNote(tech, incident.id, "Checked service logs and recent changes");

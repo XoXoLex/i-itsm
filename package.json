@@ -1,34 +1,40 @@
 {
-  "name": "itsm-backend",
+  "name": "i-itsm",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Intelligent IT Service Management & Incident Resolution System (CS F213 OOP project): TypeScript domain model, Express API, React frontend, SQLite persistence",
   "scripts": {
-    "test": "tsx --disable-warning=ExperimentalWarning --test tests/*.test.ts",
-    "demo": "tsx src/demo.ts",
-    "typecheck": "tsc --noEmit",
+    "setup": "npm install --include=dev && cd web && npm install --include=dev && npm run build",
     "start": "tsx --disable-warning=ExperimentalWarning src/main.ts",
-    "dev": "tsx watch src/main.ts",
-    "setup": "npm install && cd web && npm install && npm run build",
+    "dev": "tsx watch --disable-warning=ExperimentalWarning src/main.ts",
+    "test": "tsx --disable-warning=ExperimentalWarning --test \"tests/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "demo": "tsx --disable-warning=ExperimentalWarning src/demo.ts",
     "build:web": "cd web && npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "itsm",
+    "incident-management",
+    "oop",
+    "design-patterns",
+    "typescript"
+  ],
+  "author": "Ankur Jaipuriar (2024B5A70947H)",
+  "license": "MIT",
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.6",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.3.0",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "tsx": "^4.23.15"
   },
   "engines": {
     "node": ">=22.13"
-  }
+  },
+  "private": true
 }

@@ -1,6 +1,6 @@
 import { AuditEntry } from "../domain/AuditEntry";
 import { Priority, Role } from "../domain/enums";
-import { User } from "../domain/users";
+import { Technician, User } from "../domain/users";
 import { NotificationChannel } from "../notifications/channels";
 import { IdGenerator, Repository } from "../repositories/Repository";
 import { IncidentEvent, IncidentEventType, IncidentObserver } from "./EventBus";
@@ -37,16 +37,20 @@ export class NotificationDispatcher implements IncidentObserver {
   ) {}
 
   onEvent(e: IncidentEvent): void {
-    const recipients = this.recipientsFor(e);
-    for (const recipient of recipients) {
+    const notification = {
+      subject: `[${e.incident.id}] ${e.type.replace(/_/g, " ").toLowerCase()}`,
+      body: e.message,
+      incidentId: e.incident.id,
+      at: e.at,
+    };
+    for (const recipient of this.recipientsFor(e)) {
       for (const channel of this.channels) {
-        channel.send({
-          recipient,
-          subject: `[${e.incident.id}] ${e.type.replace(/_/g, " ").toLowerCase()}`,
-          body: e.message,
-          incidentId: e.incident.id,
-          at: e.at,
-        });
+        try {
+          channel.send({ recipient, ...notification });
+        } catch (err) {
+          // One channel being down (say, email) must not stop the others from delivering.
+          console.error(`[NotificationDispatcher] ${channel.name} failed:`, (err as Error).message);
+        }
       }
     }
   }
@@ -59,28 +63,84 @@ export class NotificationDispatcher implements IncidentObserver {
 
     switch (e.type) {
       case IncidentEventType.CREATED:
+      case IncidentEventType.ACKNOWLEDGED:
+      case IncidentEventType.WORK_STARTED:
       case IncidentEventType.RESOLVED:
-      case IncidentEventType.CLOSED:
       case IncidentEventType.INFO_REQUESTED:
         add(inc.reporter);
         break;
       case IncidentEventType.ASSIGNED:
+      case IncidentEventType.UPDATED:
+      case IncidentEventType.CLOSED:
         add(inc.assignee, inc.reporter);
         break;
+      case IncidentEventType.PRIORITY_CHANGED:
+        add(inc.assignee, inc.reporter);
+        if (inc.priority === Priority.P1) add(...admins());
+        break;
       case IncidentEventType.INFO_PROVIDED:
-      case IncidentEventType.REOPENED:
+      case IncidentEventType.NOTE_ADDED:
+      case IncidentEventType.FEEDBACK:
       case IncidentEventType.SLA_WARNING:
         add(inc.assignee);
         break;
       case IncidentEventType.PRIORITY_SET:
         if (inc.priority === Priority.P1) add(...admins());
         break;
+      case IncidentEventType.ASSIGNMENT_FAILED:
+        add(...admins());
+        break;
+      case IncidentEventType.VERIFIED: // an administrator has to close it
+      case IncidentEventType.REOPENED:
       case IncidentEventType.SLA_BREACHED:
-      case IncidentEventType.ESCALATED:
       case IncidentEventType.DUPLICATE_SUSPECTED:
         add(inc.assignee, ...admins());
         break;
+      case IncidentEventType.ESCALATED:
+        add(inc.assignee, ...this.escalationContacts(e));
+        break;
     }
-    return [...set.values()];
+    // Nobody needs telling about their own action, except the confirmation that a report was received.
+    if (e.type !== IncidentEventType.CREATED) set.delete(e.actorId);
+    return [...set.values()].filter((u) => u.active);
+  }
+
+  /**
+   * Who each rung of the escalation ladder is.
+   * Team lead: the most experienced other technician with the incident's skill.
+   * System administrator and IT manager: the administrator accounts.
+   */
+  private escalationContacts(e: IncidentEvent): User[] {
+    const inc = e.incident;
+    const admins = this.users.findAll().filter((u) => u.role === Role.ADMIN);
+    if (inc.escalationLevel >= 2) return admins;
+    const leads = this.users
+      .findAll()
+      .filter((u): u is Technician => u instanceof Technician && u.active && u.id !== inc.assignee?.id && u.hasSkill(inc.category ?? ""))
+      .sort((a, b) => b.experienceYears - a.experienceYears);
+    return leads.length ? [leads[0]] : admins;
+  }
+}
+
+/** The one thing the responder needs from the incident service (keeps this file free of a circular import). */
+export interface HandOver {
+  handOver(incident: IncidentEvent["incident"], reason: string): boolean;
+}
+
+/**
+ * Observer #3: makes escalation act, not just notify. When an incident reaches the
+ * system-administrator rung and still nobody has acknowledged it, it is taken from
+ * the silent technician and given to another one.
+ */
+export class EscalationResponder implements IncidentObserver {
+  static readonly TAKEOVER_LEVEL = 2;
+
+  constructor(private readonly incidents: HandOver) {}
+
+  onEvent(e: IncidentEvent): void {
+    if (e.type !== IncidentEventType.ESCALATED) return;
+    const inc = e.incident;
+    if (inc.escalationLevel !== EscalationResponder.TAKEOVER_LEVEL || inc.acknowledgedAt || !inc.assignee) return;
+    this.incidents.handOver(inc, `escalation: ${inc.assignee.name} did not acknowledge`);
   }
 }

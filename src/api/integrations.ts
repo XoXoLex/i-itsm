@@ -1,5 +1,7 @@
 import type { Response } from "express";
 import { Category } from "../domain/catalog";
+import { Permission } from "../domain/enums";
+import { User } from "../domain/users";
 import { IncidentEvent, IncidentObserver } from "../events/EventBus";
 import { Categorizer, CategorySuggestion } from "../intelligence/intelligence";
 import { Notification, NotificationChannel } from "../notifications/channels";
@@ -54,6 +56,7 @@ export class GeminiCategorizer implements Categorizer {
 
 /**
  * ADAPTER around Google's Gemini Decisions API (gemini-decision-1, released 11 Nov 2026).
+ * Request and response shapes follow the published REST reference; the unit test pins them with a mocked fetch.
  * Purpose-built for closed-set choices: it scores every category in one pass and returns
  * the winner with a calibrated confidence, so there is no free text to parse.
  * POST https://generativelanguage.googleapis.com/v1beta/decisions
@@ -107,35 +110,48 @@ export class GeminiDecisionCategorizer implements Categorizer {
 /**
  * Real-time push over Server-Sent Events. It is just another NotificationChannel
  * (third mechanism, alongside in-app inbox and email): no other class had to change to add it.
+ * It is also an observer, so open screens refresh themselves when an incident they show changes.
  */
 export class LiveChannel implements NotificationChannel, IncidentObserver {
   readonly name = "LIVE_PUSH";
-  private readonly clients = new Map<string, Set<Response>>();
+  private readonly clients = new Map<string, { seesEverything: boolean; streams: Set<Response> }>();
 
-  connect(userId: string, res: Response): void {
-    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+  connect(user: User, res: Response): void {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
     res.write(`event: hello\ndata: {}\n\n`);
-    const set = this.clients.get(userId) ?? new Set();
-    set.add(res);
-    this.clients.set(userId, set);
+    const client = this.clients.get(user.id) ?? { seesEverything: false, streams: new Set<Response>() };
+    client.seesEverything = user.can(Permission.VIEW_ALL_INCIDENTS);
+    client.streams.add(res);
+    this.clients.set(user.id, client);
     const ping = setInterval(() => res.write(`: ping\n\n`), 25_000);
     res.on("close", () => {
       clearInterval(ping);
-      set.delete(res);
+      client.streams.delete(res);
+      if (client.streams.size === 0) this.clients.delete(user.id);
     });
   }
+
+  get connectedUsers(): number { return this.clients.size; }
 
   /** Personal notification to one user. */
   send(n: Notification): void {
     this.write(n.recipient.id, "notification", { subject: n.subject, body: n.body, incidentId: n.incidentId, at: n.at });
   }
 
-  /** Observer: tell every open dashboard that an incident changed, so it refreshes. */
+  /**
+   * Observer: tell open screens that an incident changed, so they refresh.
+   * Only people allowed to see the incident are told: its reporter, its technician, and administrators.
+   */
   onEvent(e: IncidentEvent): void {
-    for (const userId of this.clients.keys()) this.write(userId, "incident", { id: e.incident.id, type: e.type, status: e.incident.status });
+    const inc = e.incident;
+    for (const [userId, client] of this.clients) {
+      if (client.seesEverything || userId === inc.reporter.id || userId === inc.assignee?.id) {
+        this.write(userId, "incident", { id: inc.id, type: e.type, status: inc.status });
+      }
+    }
   }
 
   private write(userId: string, event: string, data: unknown): void {
-    for (const res of this.clients.get(userId) ?? []) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    for (const res of this.clients.get(userId)?.streams ?? []) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 }

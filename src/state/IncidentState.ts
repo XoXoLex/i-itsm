@@ -20,8 +20,14 @@ export abstract class IncidentState {
   reopen(): IncidentState { return this.reject("reopen"); }
   close(): IncidentState { return this.reject("close"); }
 
+  /** Adding a note or changing the details never moves the state, but a state may still refuse it. */
+  annotate(): IncidentState { return this; }
+  amend(): IncidentState { return this; }
+
   /** Whether the incident still counts as open work. */
   isOpen(): boolean { return true; }
+  /** True only while the technician is waiting for the reporter's answer. */
+  isAwaitingReporter(): boolean { return false; }
 
   protected reject(action: string): never {
     throw new InvalidStateTransitionException(this.status, action);
@@ -68,19 +74,23 @@ export class AcknowledgedState extends IncidentState {
 
 export class InProgressState extends IncidentState {
   readonly status = IncidentStatus.IN_PROGRESS;
+  assign() { return new AssignedState(); } // handed to someone else: they must acknowledge again
   requestInfo() { return new PendingInfoState(); }
   resolve() { return new ResolvedState(); }
 }
 
 export class PendingInfoState extends IncidentState {
   readonly status = IncidentStatus.PENDING_INFO;
+  assign() { return new AssignedState(); }
   provideInfo() { return new InProgressState(); }
+  isAwaitingReporter() { return true; }
 }
 
 export class ResolvedState extends IncidentState {
   readonly status = IncidentStatus.RESOLVED;
   verify() { return new VerifiedState(); }
   reopen() { return new InProgressState(); }
+  amend(): IncidentState { return this.reject("edit"); }
   isOpen() { return false; }
 }
 
@@ -88,10 +98,14 @@ export class VerifiedState extends IncidentState {
   readonly status = IncidentStatus.VERIFIED;
   close() { return new ClosedState(); }
   reopen() { return new InProgressState(); }
+  amend(): IncidentState { return this.reject("edit"); }
   isOpen() { return false; }
 }
 
+/** Terminal: nothing can be added or changed once an incident is closed. */
 export class ClosedState extends IncidentState {
   readonly status = IncidentStatus.CLOSED;
+  annotate(): IncidentState { return this.reject("add to"); }
+  amend(): IncidentState { return this.reject("edit"); }
   isOpen() { return false; }
 }

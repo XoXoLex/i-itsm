@@ -2,7 +2,10 @@ import { useState } from "react";
 import { api, fmtTime, PRIORITY_LABEL, Priority } from "./api";
 import { useLoad } from "./ui";
 
-type Overview = { total: number; open: number; critical: number; resolved: number; slaViolations: number; atRisk: number; avgRating: number | null };
+type Overview = {
+  total: number; open: number; critical: number; resolved: number; slaViolations: number; atRisk: number;
+  unassigned: number; awaitingClosure: number; escalated: number; avgRating: number | null;
+};
 type Load = { id: string; name: string; active: number; max: number; available: boolean }[];
 type Trend = { date: string; created: number; resolved: number }[];
 type Violation = { id: string; incidentId: string; kind: string; deadline: string; detectedAt: string; priority: Priority };
@@ -13,7 +16,7 @@ export function Dashboard({ refreshKey }: { refreshKey: number }) {
   const { data } = useLoad(async () => {
     const [overview, workload, byService, byPriority, trend, violations] = await Promise.all([
       api<Overview>("/reports/overview"), api<Load>("/reports/workload"), api<Record<string, number>>("/reports/by-service"),
-      api<Record<string, number>>("/reports/by-priority"), api<Trend>("/reports/trend"), api<Violation[]>("/reports/sla-violations"),
+      api<Record<string, number>>("/reports/by-priority"), api<Trend>(`/reports/trend?tz=${-new Date().getTimezoneOffset()}`), api<Violation[]>("/reports/sla-violations"),
     ]);
     return { overview, workload, byService, byPriority, trend, violations };
   }, [refreshKey]);
@@ -32,6 +35,14 @@ export function Dashboard({ refreshKey }: { refreshKey: number }) {
         <Kpi n={o.resolved} label={`resolved of ${o.total} total`} />
         <Kpi n={o.avgRating ?? "—"} label="average rating out of 5" />
       </div>
+
+      {(o.unassigned > 0 || o.awaitingClosure > 0 || o.escalated > 0) && (
+        <ul className="attention" aria-label="Needs your attention">
+          {o.unassigned > 0 && <li><a href="#/all?status=CLASSIFIED"><strong>{o.unassigned}</strong> waiting for a technician</a><span>Nobody suitable was free. Assign by hand, or it is retried automatically.</span></li>}
+          {o.escalated > 0 && <li><a href="#/all?openOnly=true"><strong>{o.escalated}</strong> escalated and still open</a><span>Past a deadline. The audit trail shows who was told.</span></li>}
+          {o.awaitingClosure > 0 && <li><a href="#/all?status=VERIFIED"><strong>{o.awaitingClosure}</strong> confirmed fixed, waiting to be closed</a><span>The reporter verified the fix. Only an administrator can close.</span></li>}
+        </ul>
+      )}
 
       <div className="dash-grid">
         <section className="panel span-2">
@@ -128,7 +139,7 @@ function TrendChart({ data }: { data: Trend }) {
           <span><i style={{ background: SERIES.resolved }} />Resolved</span>
         </div>
         <p className="readout" aria-live="polite">
-          {new Date(d.date).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}: <strong>{d.created}</strong> reported, <strong>{d.resolved}</strong> resolved
+          {new Date(`${d.date}T12:00:00`).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}: <strong>{d.created}</strong> reported, <strong>{d.resolved}</strong> resolved
         </p>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="trend-svg" role="img" aria-label="Incidents reported and resolved per day" onMouseLeave={() => setHover(null)}>

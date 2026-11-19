@@ -1,5 +1,6 @@
 import { Level, Priority } from "../../domain/enums";
 import { Incident } from "../../domain/Incident";
+import { InvalidInputException } from "../../exceptions/errors";
 
 export interface PriorityResult {
   priority: Priority;
@@ -74,8 +75,8 @@ export class PriorityStrategyFactory {
   };
 
   static create(name: string): PriorityStrategy {
-    const make = this.registry[name.toUpperCase()];
-    if (!make) throw new Error(`Unknown priority strategy ${name}. Options: ${this.available().join(", ")}`);
+    const make = this.registry[String(name).toUpperCase()];
+    if (!make) throw new InvalidInputException(`Unknown priority strategy ${name}. Options: ${this.available().join(", ")}`);
     return make();
   }
 
