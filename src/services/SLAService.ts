@@ -22,7 +22,10 @@ export interface SLAViolation {
  */
 export const ESCALATION_CHAIN = ["TECHNICIAN", "TEAM_LEAD", "SYSTEM_ADMIN", "IT_MANAGER"] as const;
 const TOP_LEVEL = ESCALATION_CHAIN.length - 1;
-const label = (level: number) => ESCALATION_CHAIN[level].replace("_", " ").toLowerCase();
+const LEVEL_NAME: Record<(typeof ESCALATION_CHAIN)[number], string> = {
+  TECHNICIAN: "technician", TEAM_LEAD: "team lead", SYSTEM_ADMIN: "system administrator", IT_MANAGER: "IT manager",
+};
+const label = (level: number) => LEVEL_NAME[ESCALATION_CHAIN[level]];
 const minutes = (ms: number) => Math.max(0, Math.round(ms / 60_000));
 
 export class SLAService {

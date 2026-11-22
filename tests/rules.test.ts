@@ -166,8 +166,8 @@ test("TC29 escalation climbs to the IT manager, hands the incident over on the w
   assert.equal(inc.escalationLevel, 3);          // never past the top
   const trail = sys.reports.auditTrail(admin, inc.id).filter((a) => a.action === "ESCALATED").map((a) => a.description);
   assert.equal(trail.length, 3);
-  assert.match(trail[2], /it manager \(level 3 of 3\)/);
-  assert.ok(sys.inApp.inboxOf(admin.id).some((n) => n.body.includes("it manager")));
+  assert.match(trail[2], /IT manager \(level 3 of 3\)/);
+  assert.ok(sys.inApp.inboxOf(admin.id).some((n) => n.body.includes("IT manager")));
 });
 
 test("TC30 an incident left for ten hours catches up the whole ladder in one check, one audit entry per rung", async () => {

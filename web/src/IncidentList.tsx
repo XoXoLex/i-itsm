@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { api, dayBoundary, fmtTime, Incident, Meta, STATUS_LABEL, titleCase, User } from "./api";
+import { api, dayBoundary, ESCALATION_LABEL, fmtTime, Incident, Meta, STATUS_LABEL, titleCase, User } from "./api";
 import { Empty, PriorityTag, SlaFuse, StatusText, useLoad, useNow } from "./ui";
 
 type Filters = {
@@ -99,7 +99,7 @@ export function IncidentList({ me, meta, refreshKey, title, preset, initial }: {
                   <td><PriorityTag p={i.priority} /></td>
                   <td className="cell-title">
                     <a href={`#/incidents/${i.id}`} onClick={(e) => e.stopPropagation()}><span className="inc-id">{i.id}</span> {i.title}</a>
-                    <span className="sub">{i.service.name}{i.category ? `, ${titleCase(i.category)}` : ""}{i.related.length > 0 && <span className="linked"> · linked to {i.related.length}</span>}{i.escalatedTo && <span className="escalated"> · escalated to {titleCase(i.escalatedTo)}</span>}</span>
+                    <span className="sub">{i.service.name}{i.category ? `, ${titleCase(i.category)}` : ""}{i.related.length > 0 && <span className="linked"> · linked to {i.related.length}</span>}{i.escalatedTo && <span className="escalated"> · escalated to the {ESCALATION_LABEL[i.escalatedTo] ?? i.escalatedTo}</span>}</span>
                   </td>
                   <td><StatusText s={i.status} /></td>
                   {!isEmployee && <td>{i.assignee?.name ?? <span className={i.isOpen ? "escalated" : "muted"}>Unassigned</span>}</td>}

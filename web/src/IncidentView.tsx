@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useState } from "react";
-import { api, fmtTime, IncidentDetail, Meta, STATUS_LABEL, titleCase, User } from "./api";
+import { api, ESCALATION_LABEL, fmtTime, IncidentDetail, Meta, STATUS_LABEL, titleCase, User } from "./api";
 import { Empty, Field, Lifecycle, PriorityTag, SlaFuse, StatusText, useAction, useLoad, useNow, useToast } from "./ui";
 
 export function IncidentView({ id, me, meta, refreshKey }: { id: string; me: User; meta: Meta; refreshKey: number }) {
@@ -42,7 +42,7 @@ export function IncidentView({ id, me, meta, refreshKey }: { id: string; me: Use
             </div>
             {inc.escalatedTo && inc.isOpen && (
               <p className="callout callout-error">
-                <strong>Escalated to the {titleCase(inc.escalatedTo).toLowerCase()}</strong> (level {inc.escalationLevel} of 3) because a deadline has passed.
+                <strong>Escalated to the {ESCALATION_LABEL[inc.escalatedTo] ?? inc.escalatedTo}</strong> (level {inc.escalationLevel} of 3) because a deadline has passed.
                 {me.role === "ADMIN" ? " The audit trail below shows each step and who was told." : ""}
               </p>
             )}

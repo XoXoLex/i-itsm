@@ -140,4 +140,7 @@ export const STATUS_LABEL: Record<string, string> = {
 };
 
 export const PRIORITY_LABEL: Record<Priority, string> = { P1: "Critical", P2: "High", P3: "Medium", P4: "Low" };
+/** How each rung of the escalation ladder is written in sentences. */
+export const ESCALATION_LABEL: Record<string, string> = { TEAM_LEAD: "team lead", SYSTEM_ADMIN: "system administrator", IT_MANAGER: "IT manager" };
+
 export const titleCase = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
