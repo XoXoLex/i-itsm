@@ -385,17 +385,39 @@ a.kpi:hover { background: #f7f9fa; }
 .people td { vertical-align: middle; }
 
 /* ------------------------------------------------------------------ login */
-.login { display: grid; grid-template-columns: 1.1fr 1fr; min-height: 100%; }
-.login-brand { background: var(--rail); color: var(--rail-ink); padding: 72px 64px; display: flex; flex-direction: column; justify-content: center; }
-.login-title { color: #fff; font-size: clamp(48px, 7vw, 88px); font-weight: 700; line-height: 0.95; margin: 0 0 20px; }
-.login-lede { font-size: 18px; max-width: 34ch; margin: 0 0 40px; }
-.login-fuse { display: flex; flex-direction: column; gap: 14px; max-width: 420px; }
-.login-fuse .fuse-track { background: #2a3644; }
-.login-fuse .fuse-label { color: var(--rail-ink); }
-.login-fuse .fuse-risk .fuse-label { color: #e7b453; }
-.login-fuse .fuse-fill { animation: burn 2.4s cubic-bezier(.3, .6, .4, 1) both; }
+.login { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 100vh; }
+.login-brand { background: var(--rail); color: var(--rail-ink); padding: 56px clamp(24px, 6vw, 88px); display: flex; align-items: center; justify-content: center; }
+.login-brand-inner { width: 100%; max-width: 560px; }
+.login-title { color: #fff; font-size: clamp(44px, 5.6vw, 76px); font-weight: 700; line-height: 0.95; margin: 0 0 16px; }
+.login-lede { font-size: 18px; max-width: 36ch; margin: 0 0 32px; color: var(--rail-ink); }
+
+/* The walk-through: one report, and what the desk does with it in the first second. */
+.walk { margin: 0; background: #1f2a37; border: 1px solid #2f3c4c; border-radius: 8px; overflow: hidden; }
+.walk-head { display: grid; gap: 4px; padding: 18px 20px 16px; border-bottom: 1px solid #2f3c4c; }
+.walk-kicker { font-size: 13px; color: #8fa0b2; }
+.walk-report { font: 600 20px/1.2 var(--display); color: #fff; }
+.walk-meta { font-size: 13.5px; color: #a9b6c4; }
+.walk-steps { list-style: none; margin: 0; padding: 6px 20px; counter-reset: walk; }
+.walk-steps li { display: grid; grid-template-columns: 124px 1fr; gap: 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px dashed #2f3c4c; animation: walk-in 420ms ease-out both; counter-increment: walk; }
+.walk-steps li:last-child { border-bottom: 0; }
+.walk-step { font: 600 14px var(--display); color: #8fd3e2; letter-spacing: 0.01em; }
+.walk-step::before { content: counter(walk) " "; color: #5d6f82; }
+.walk-value { color: #e6ebf0; font-size: 15px; }
+.walk-value .ptag { margin-right: 6px; padding: 2px 7px; font-size: 13px; color: var(--ink); vertical-align: 1px; }
+.walk-clock { padding: 14px 20px 18px; background: #18222e; border-top: 1px solid #2f3c4c; animation: walk-in 420ms ease-out both; }
+.walk-clock .fuse-track { background: #2a3644; }
+.walk-clock .fuse-label { color: #fff; }
+.walk-clock .fuse-fill { animation: burn 2.4s cubic-bezier(.3, .6, .4, 1) 900ms both; }
+.walk-clock p { margin: 10px 0 0; font-size: 13.5px; color: #a9b6c4; }
+@keyframes walk-in { from { opacity: 0; transform: translateY(4px); } }
 @keyframes burn { from { width: 100%; } }
-.login-panel { padding: 72px 64px; display: flex; flex-direction: column; justify-content: center; max-width: 560px; }
+@media (prefers-reduced-motion: reduce) {
+  .walk-steps li, .walk-clock, .walk-clock .fuse-fill { animation: none; }
+}
+
+.login-panel { padding: 56px clamp(24px, 5vw, 72px); display: flex; align-items: center; justify-content: center; }
+.login-panel-inner { width: 100%; max-width: 420px; }
+.demo-hint { margin: -6px 0 12px; font-size: 14px; color: var(--ink-3); }
 .tabs { display: flex; gap: 4px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 2px; margin-right: 18px; font: 600 15px var(--body); color: var(--ink-3); cursor: pointer; }
 .tabs button.on { color: var(--ink); border-bottom-color: var(--action); }
@@ -424,8 +446,10 @@ a.kpi:hover { background: #f7f9fa; }
   .rail-foot .btn-rail { width: auto; }
   .inbox-panel { bottom: auto; top: calc(100% + 8px); width: min(360px, 90vw); }
   .main { padding: 20px 16px 48px; }
-  .login { grid-template-columns: 1fr; }
-  .login-brand, .login-panel { padding: 40px 24px; }
+  .login { grid-template-columns: 1fr; min-height: 0; }
+  .login-brand, .login-panel { padding: 36px 20px; }
+  .login-panel { order: -1; } /* on a phone the sign-in form comes first; the walk-through follows */
+  .walk-steps li { grid-template-columns: 1fr; gap: 2px; }
   .scale { grid-template-columns: 1fr 1fr; }
   .grid-2 { grid-template-columns: 1fr; }
   .inc-head { grid-template-columns: 1fr; }
@@ -438,7 +462,6 @@ a.kpi:hover { background: #f7f9fa; }
 /* ------------------------------------------------------------------ additions: editing, attention list, email log */
 .btn-danger { background: var(--breach); border-color: var(--breach); color: #fff; }
 .is-off td { color: var(--ink-3); }
-.login-example { color: var(--rail-ink); opacity: 0.75; font-size: 14px; margin: 28px 0 12px; }
 .rail-user a { display: block; margin-top: 4px; font-size: 12px; color: var(--rail-ink); opacity: 0.8; }
 .table-wrap.bare { border: 0; background: none; }
 .people th, .people td { padding: 10px 12px; }

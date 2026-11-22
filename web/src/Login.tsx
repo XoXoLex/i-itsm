@@ -29,19 +29,44 @@ export function Login({ onLogin }: { onLogin: (u: User) => void }) {
   return (
     <main className="login">
       <section className="login-brand">
-        <h1 className="login-title">Service Desk</h1>
-        <p className="login-lede">
-          Report an IT problem and follow it until it is fixed. Every incident gets a priority, an owner and a deadline the moment you file it.
-        </p>
-        <p className="login-example">Example: how each incident shows the time left on its deadline.</p>
-        <div className="login-fuse" aria-hidden="true">
-          <div className="fuse fuse-risk"><div className="fuse-track"><div className="fuse-fill" style={{ width: "22%" }} /></div><span className="fuse-label">6m left · at risk</span></div>
-          <div className="fuse fuse-ok"><div className="fuse-track"><div className="fuse-fill" style={{ width: "71%" }} /></div><span className="fuse-label">1h 25m left · on track</span></div>
-          <div className="fuse fuse-met"><div className="fuse-track"><div className="fuse-fill" style={{ width: "40%" }} /></div><span className="fuse-label">Fixed with 3h to spare</span></div>
+        <div className="login-brand-inner">
+          <h1 className="login-title">Service Desk</h1>
+          <p className="login-lede">Report an IT problem. The desk works out how urgent it is, who should fix it and by when.</p>
+
+          <figure className="walk" aria-label="Example: what happens when an employee reports an outage">
+            <figcaption className="walk-head">
+              <span className="walk-kicker">What happens the moment you report</span>
+              <span className="walk-report">Payment application unavailable</span>
+              <span className="walk-meta">Payment Application · 300 people affected · business stopped</span>
+            </figcaption>
+            <ol className="walk-steps">
+              <li style={{ animationDelay: "150ms" }}>
+                <span className="walk-step">Classified</span>
+                <span className="walk-value">Application, from the words in the report</span>
+              </li>
+              <li style={{ animationDelay: "300ms" }}>
+                <span className="walk-step">Prioritised</span>
+                <span className="walk-value"><span className="ptag ptag-P1">P1</span> impact 4 × urgency 4 × criticality 4 = 64</span>
+              </li>
+              <li style={{ animationDelay: "450ms" }}>
+                <span className="walk-step">Deadlines set</span>
+                <span className="walk-value">Respond in 5 min, fix in 30 min</span>
+              </li>
+              <li style={{ animationDelay: "600ms" }}>
+                <span className="walk-step">Assigned</span>
+                <span className="walk-value">Rahul, who knows this service best</span>
+              </li>
+            </ol>
+            <div className="walk-clock" style={{ animationDelay: "750ms" }}>
+              <div className="fuse"><div className="fuse-track"><div className="fuse-fill" style={{ width: "93%" }} /></div><span className="fuse-label">28 min left to fix</span></div>
+              <p>If nobody acknowledges it, it climbs to the team lead, then the IT manager.</p>
+            </div>
+          </figure>
         </div>
       </section>
 
       <section className="login-panel">
+        <div className="login-panel-inner">
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={mode === "login"} className={mode === "login" ? "on" : ""} onClick={() => setMode("login")}>Sign in</button>
           <button role="tab" aria-selected={mode === "register"} className={mode === "register" ? "on" : ""} onClick={() => setMode("register")}>Create employee account</button>
@@ -61,12 +86,14 @@ export function Login({ onLogin }: { onLogin: (u: User) => void }) {
         </form>
 
         <div className="demo">
-          <p className="demo-title">Demo accounts (seeded sample data, one click to sign in)</p>
+          <p className="demo-title">Try it with a demo account</p>
+          <p className="demo-hint">Sample data is already loaded. One click signs you in.</p>
           {DEMO.map((d) => (
             <button key={d.email} className="demo-row" onClick={() => go(d.email, d.password)} disabled={busy}>
               <strong>{d.label}</strong><span>{d.who}</span>
             </button>
           ))}
+        </div>
         </div>
       </section>
     </main>
