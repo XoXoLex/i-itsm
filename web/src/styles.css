@@ -25,7 +25,7 @@
   --breach: #c8102e;
   --met: #3d8b5a;
 
-  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;   /* names, titles, big numbers */
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;   /* names, titles, big numbers */
   --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --display: var(--body);                                            /* small bold labels: badges, steps */
   --r-panel: 6px;
@@ -57,16 +57,18 @@ a { color: var(--action); text-underline-offset: 2px; }
 .skip:focus { left: 8px; top: 8px; z-index: 10; background: var(--surface); padding: 6px 10px; }
 
 /* ------------------------------------------------------------------ type */
-/* The serif has one weight and carries emphasis by size, so it is never bolded. */
+/* One serif weight for every title, so emphasis comes from size. */
 .page-title, .login-title, .inc-title, .kpi-n, .workload-n, .rail-name, .sla-big .fuse-label {
   font-family: var(--serif);
-  font-weight: 400 !important;
-  letter-spacing: 0;
+  font-weight: 500 !important;
+  letter-spacing: -0.01em;
 }
-.page-title { font-size: 40px; line-height: 1.05; margin: 0 0 20px; }
+.page-title { font-size: 36px; line-height: 1.1; margin: 0 0 20px; }
 .h2 { font-family: var(--body); font-size: 16px; font-weight: 600; margin: 0 0 12px; }
 
 /* ------------------------------------------------------------------ controls */
+/* Safari draws button text in system blue unless told otherwise. */
+button { color: inherit; font-family: inherit; }
 input, select, textarea {
   font: inherit;
   color: var(--ink);
@@ -117,7 +119,7 @@ input:hover, select:hover, textarea:hover { border-color: #b9c2cc; }
   height: 100vh;
 }
 .rail-brand { padding: 0 20px 22px; display: flex; flex-direction: column; }
-.rail-name { color: #fff; font-size: 34px; line-height: 1; }
+.rail-name { color: #fff; font-size: 30px; line-height: 1; }
 .rail-by { margin-top: 6px; font-size: 12px; color: #8fa0b2; }
 .rail-role { font-size: 13px; color: #8c99a8; }
 .rail-nav { list-style: none; margin: 0; padding: 0; flex: 1; }
@@ -263,7 +265,7 @@ th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ink-2); }
 .col-sla { width: 240px; }
 
 .workload { display: grid; grid-template-columns: auto auto; column-gap: 10px; align-items: center; margin-bottom: 16px; }
-.workload-n { font-size: 38px; line-height: 1; grid-row: span 2; }
+.workload-n { font-size: 32px; line-height: 1; grid-row: span 2; }
 .workload-l { font-size: 13px; color: var(--ink-2); }
 .workload-cells, .load-cells { display: flex; gap: 3px; }
 .workload-cells span, .load-cells span { width: 16px; height: 8px; border-radius: 2px; background: var(--line); }
@@ -277,7 +279,7 @@ th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ink-2); }
 .back::before { content: "‹ "; }
 .inc-head { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: start; margin-bottom: 20px; }
 .inc-head .ptag { font-size: 16px; padding: 8px 10px; margin-top: 4px; }
-.inc-title { font-size: 36px; margin: 0; line-height: 1.1; }
+.inc-title { font-size: 30px; margin: 0; line-height: 1.15; }
 .inc-head p { margin: 4px 0 0; }
 .inc-head .status { margin-top: 10px; }
 .inc-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
@@ -294,7 +296,7 @@ th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ink-2); }
 
 .sla-big { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line-2); }
 .sla-big .fuse-track { height: 14px; border-radius: 7px; }
-.sla-big .fuse-label { font-size: 26px; }
+.sla-big .fuse-label { font-size: 22px; }
 .sla-big p { margin: 8px 0 0; }
 .desc { white-space: pre-wrap; margin: 0 0 16px; max-width: 70ch; }
 .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 20px; margin: 0; }
@@ -354,7 +356,7 @@ th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ink-2); }
 .kpis { display: grid; grid-template-columns: repeat(6, 1fr); border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); margin-bottom: 20px; }
 .kpi { padding: 16px 18px; border-right: 1px solid var(--line-2); display: flex; flex-direction: column; color: var(--ink); text-decoration: none; }
 .kpi:last-child { border-right: 0; }
-.kpi-n { font-size: 44px; line-height: 1; }
+.kpi-n { font-size: 38px; line-height: 1; }
 .kpi-l { font-size: 13px; color: var(--ink-2); }
 .kpi-danger .kpi-n { color: var(--breach); }
 .kpi-warn .kpi-n { color: #8a5b00; }
@@ -392,21 +394,24 @@ a.kpi:hover { background: #f7f9fa; }
 .login { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 100vh; }
 .login-brand { background: var(--rail); color: var(--rail-ink); padding: 56px clamp(24px, 6vw, 88px); display: flex; align-items: center; justify-content: center; }
 .login-brand-inner { width: 100%; max-width: 560px; }
-.login-title { color: #fff; font-size: clamp(96px, 11vw, 168px); line-height: 0.85; margin: 0; }
+.login-title { color: #fff; font-size: clamp(88px, 9.5vw, 144px); font-weight: 600 !important; line-height: 0.9; margin: 0; letter-spacing: -0.02em; }
 /* The wordmark's fuse: lit once on load, it burns back and stops, like an SLA clock. */
 .wordmark-fuse { position: relative; height: 3px; margin: 14px 0 26px; max-width: 360px; background: #2a3644; border-radius: 2px; }
-.wordmark-fuse span { position: absolute; inset: 0 auto 0 0; width: 64%; background: var(--ok); border-radius: 2px; animation: burn 2.6s cubic-bezier(.3, .6, .4, 1) 300ms both; }
-.wordmark-fuse span::after { content: ""; position: absolute; right: -3px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--risk); box-shadow: 0 0 10px 3px rgba(231, 180, 83, 0.55); }
+/* Burns down over a minute, relights, and keeps going; the spark at its tip flickers. */
+.wordmark-fuse span { position: absolute; inset: 0 auto 0 0; width: 100%; background: var(--ok); border-radius: 2px; animation: fuse-burn 60s linear infinite; }
+.wordmark-fuse span::after { content: ""; position: absolute; right: -3px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--risk); box-shadow: 0 0 10px 3px rgba(231, 180, 83, 0.55); animation: spark 0.9s ease-in-out infinite alternate; }
+@keyframes fuse-burn { 0% { width: 100%; } 96% { width: 6%; opacity: 1; } 98% { width: 6%; opacity: 0; } 100% { width: 100%; opacity: 0; } }
+@keyframes spark { from { transform: scale(0.85); box-shadow: 0 0 6px 2px rgba(231, 180, 83, 0.4); } to { transform: scale(1.25); box-shadow: 0 0 14px 5px rgba(231, 180, 83, 0.7); } }
 .login-by { margin: 28px 0 0; font-size: 13px; color: #8fa0b2; }
 .login-by strong { color: var(--rail-ink); font-weight: 600; }
-@media (prefers-reduced-motion: reduce) { .wordmark-fuse span { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .wordmark-fuse span, .wordmark-fuse span::after { animation: none; } .wordmark-fuse span { width: 64%; } }
 .login-lede { font-size: 18px; max-width: 36ch; margin: 0 0 32px; color: var(--rail-ink); }
 
 /* The walk-through: one report, and what the desk does with it in the first second. */
 .walk { margin: 0; background: #1f2a37; border: 1px solid #2f3c4c; border-radius: 8px; overflow: hidden; }
 .walk-head { display: grid; gap: 4px; padding: 18px 20px 16px; border-bottom: 1px solid #2f3c4c; }
 .walk-kicker { font-size: 13px; color: #8fa0b2; }
-.walk-report { font: 400 26px/1.1 var(--serif); color: #fff; }
+.walk-report { font: 500 22px/1.2 var(--serif); color: #fff; letter-spacing: -0.01em; }
 .walk-meta { font-size: 13.5px; color: #a9b6c4; }
 .walk-steps { list-style: none; margin: 0; padding: 6px 20px; counter-reset: walk; }
 .walk-steps li { display: grid; grid-template-columns: 124px 1fr; gap: 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px dashed #2f3c4c; animation: walk-in 420ms ease-out both; counter-increment: walk; }
@@ -436,7 +441,10 @@ a.kpi:hover { background: #f7f9fa; }
 .demo-title { font-weight: 600; margin: 0 0 10px; }
 .demo-row { display: flex; justify-content: space-between; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 11px 14px; margin-bottom: 6px; font: inherit; cursor: pointer; text-align: left; }
 .demo-row:hover { border-color: var(--action); }
+.demo-row strong { color: var(--ink); }
 .demo-row span { color: var(--ink-3); }
+.login-panel-title { font-family: var(--serif); font-weight: 500; font-size: 40px; letter-spacing: -0.01em; line-height: 1; margin: 0 0 6px; color: var(--ink); }
+.login-panel-sub { margin: 0 0 22px; color: var(--ink-3); }
 
 /* ------------------------------------------------------------------ responsive */
 @media (max-width: 1100px) {
@@ -526,7 +534,7 @@ a.kpi:hover { background: #f7f9fa; }
 @media (min-width: 821px) and (max-height: 860px) {
   /* Short laptop screens: keep the whole login page on one screen. */
   .login-brand, .login-panel { padding-top: 32px; padding-bottom: 32px; }
-  .login-title { font-size: clamp(84px, 9vw, 120px); }
+  .login-title { font-size: clamp(76px, 8vw, 104px); }
   .wordmark-fuse { margin: 10px 0 18px; }
   .login-lede { margin-bottom: 20px; }
   .walk-steps li { padding: 7px 0; }

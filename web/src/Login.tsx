@@ -69,6 +69,8 @@ export function Login({ onLogin }: { onLogin: (u: User) => void }) {
 
       <section className="login-panel">
         <div className="login-panel-inner">
+        <h2 className="login-panel-title">{mode === "login" ? "Welcome back" : "Join Fuse"}</h2>
+        <p className="login-panel-sub">{mode === "login" ? "Sign in to see your incidents." : "Employees can create their own account."}</p>
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={mode === "login"} className={mode === "login" ? "on" : ""} onClick={() => setMode("login")}>Sign in</button>
           <button role="tab" aria-selected={mode === "register"} className={mode === "register" ? "on" : ""} onClick={() => setMode("register")}>Create employee account</button>
