@@ -30,8 +30,9 @@ export function Login({ onLogin }: { onLogin: (u: User) => void }) {
     <main className="login">
       <section className="login-brand">
         <div className="login-brand-inner">
-          <h1 className="login-title">Service Desk</h1>
-          <p className="login-lede">Report an IT problem. The desk works out how urgent it is, who should fix it and by when.</p>
+          <h1 className="login-title">Fuse</h1>
+          <div className="wordmark-fuse" aria-hidden="true"><span /></div>
+          <p className="login-lede">An IT service desk. Report a problem and Fuse works out how urgent it is, who should fix it and by when.</p>
 
           <figure className="walk" aria-label="Example: what happens when an employee reports an outage">
             <figcaption className="walk-head">
@@ -62,6 +63,7 @@ export function Login({ onLogin }: { onLogin: (u: User) => void }) {
               <p>If nobody acknowledges it, it climbs to the team lead, then the IT manager.</p>
             </div>
           </figure>
+          <p className="login-by">Built by <strong>Ankur Jaipuriar</strong> · 2024B5A70947H · CS F213 Object Oriented Programming</p>
         </div>
       </section>
 

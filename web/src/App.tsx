@@ -86,7 +86,7 @@ function Shell({ me, onLogout }: { me: User; onLogout: () => void }) {
       <a className="skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById("main")?.focus(); }}>Skip to content</a>
       <nav className="rail" aria-label="Main">
         <div className="rail-brand">
-          <span className="rail-name">Service Desk</span>
+          <span className="rail-name">Fuse</span>
           <span className="rail-role">{ROLE_LABEL[me.role]}</span>
         </div>
         <ul className="rail-nav">
@@ -98,6 +98,7 @@ function Shell({ me, onLogout }: { me: User; onLogout: () => void }) {
           <Inbox me={me} refreshKey={refreshKey} />
           <p className="rail-user">{me.name}<span>{me.email}</span><a href="#/account">Change password</a></p>
           <button className="btn btn-rail" onClick={onLogout}>Sign out</button>
+          <p className="rail-by">Fuse, built by Ankur Jaipuriar</p>
         </div>
       </nav>
       <main id="main" tabIndex={-1} className="main">{page}</main>

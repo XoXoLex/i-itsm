@@ -1,4 +1,4 @@
-# I-ITSM: Intelligent IT Service Management & Incident Resolution System
+# Fuse: Intelligent IT Service Management & Incident Resolution System (I-ITSM)
 
 [![CI](https://github.com/XoXoLex/i-itsm/actions/workflows/ci.yml/badge.svg)](https://github.com/XoXoLex/i-itsm/actions/workflows/ci.yml)
 

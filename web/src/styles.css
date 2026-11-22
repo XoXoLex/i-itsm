@@ -25,8 +25,9 @@
   --breach: #c8102e;
   --met: #3d8b5a;
 
-  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
-  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;   /* names, titles, big numbers */
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: var(--body);                                            /* small bold labels: badges, steps */
   --r-panel: 6px;
   --r-ctl: 4px;
 }
@@ -56,12 +57,14 @@ a { color: var(--action); text-underline-offset: 2px; }
 .skip:focus { left: 8px; top: 8px; z-index: 10; background: var(--surface); padding: 6px 10px; }
 
 /* ------------------------------------------------------------------ type */
-.page-title, .login-title, .inc-title, .h2, .kpi-n, .workload-n, .rail-name {
-  font-family: var(--display);
-  letter-spacing: -0.005em;
+/* The serif has one weight and carries emphasis by size, so it is never bolded. */
+.page-title, .login-title, .inc-title, .kpi-n, .workload-n, .rail-name, .sla-big .fuse-label {
+  font-family: var(--serif);
+  font-weight: 400 !important;
+  letter-spacing: 0;
 }
-.page-title { font-size: 30px; font-weight: 600; line-height: 1.15; margin: 0 0 20px; }
-.h2 { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+.page-title { font-size: 40px; line-height: 1.05; margin: 0 0 20px; }
+.h2 { font-family: var(--body); font-size: 16px; font-weight: 600; margin: 0 0 12px; }
 
 /* ------------------------------------------------------------------ controls */
 input, select, textarea {
@@ -114,7 +117,8 @@ input:hover, select:hover, textarea:hover { border-color: #b9c2cc; }
   height: 100vh;
 }
 .rail-brand { padding: 0 20px 22px; display: flex; flex-direction: column; }
-.rail-name { color: #fff; font-size: 22px; font-weight: 700; }
+.rail-name { color: #fff; font-size: 34px; line-height: 1; }
+.rail-by { margin-top: 6px; font-size: 12px; color: #8fa0b2; }
 .rail-role { font-size: 13px; color: #8c99a8; }
 .rail-nav { list-style: none; margin: 0; padding: 0; flex: 1; }
 .rail-nav a {
@@ -259,7 +263,7 @@ th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ink-2); }
 .col-sla { width: 240px; }
 
 .workload { display: grid; grid-template-columns: auto auto; column-gap: 10px; align-items: center; margin-bottom: 16px; }
-.workload-n { font-size: 28px; font-weight: 700; line-height: 1; grid-row: span 2; }
+.workload-n { font-size: 38px; line-height: 1; grid-row: span 2; }
 .workload-l { font-size: 13px; color: var(--ink-2); }
 .workload-cells, .load-cells { display: flex; gap: 3px; }
 .workload-cells span, .load-cells span { width: 16px; height: 8px; border-radius: 2px; background: var(--line); }
@@ -273,7 +277,7 @@ th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ink-2); }
 .back::before { content: "‹ "; }
 .inc-head { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: start; margin-bottom: 20px; }
 .inc-head .ptag { font-size: 16px; padding: 8px 10px; margin-top: 4px; }
-.inc-title { font-size: 28px; font-weight: 600; margin: 0; line-height: 1.2; }
+.inc-title { font-size: 36px; margin: 0; line-height: 1.1; }
 .inc-head p { margin: 4px 0 0; }
 .inc-head .status { margin-top: 10px; }
 .inc-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
@@ -290,7 +294,7 @@ th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ink-2); }
 
 .sla-big { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line-2); }
 .sla-big .fuse-track { height: 14px; border-radius: 7px; }
-.sla-big .fuse-label { font: 700 20px var(--display); }
+.sla-big .fuse-label { font-size: 26px; }
 .sla-big p { margin: 8px 0 0; }
 .desc { white-space: pre-wrap; margin: 0 0 16px; max-width: 70ch; }
 .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 20px; margin: 0; }
@@ -350,7 +354,7 @@ th { text-align: left; font-weight: 600; font-size: 13px; color: var(--ink-2); }
 .kpis { display: grid; grid-template-columns: repeat(6, 1fr); border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--surface); margin-bottom: 20px; }
 .kpi { padding: 16px 18px; border-right: 1px solid var(--line-2); display: flex; flex-direction: column; color: var(--ink); text-decoration: none; }
 .kpi:last-child { border-right: 0; }
-.kpi-n { font-size: 34px; font-weight: 700; line-height: 1.05; }
+.kpi-n { font-size: 44px; line-height: 1; }
 .kpi-l { font-size: 13px; color: var(--ink-2); }
 .kpi-danger .kpi-n { color: var(--breach); }
 .kpi-warn .kpi-n { color: #8a5b00; }
@@ -388,14 +392,21 @@ a.kpi:hover { background: #f7f9fa; }
 .login { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 100vh; }
 .login-brand { background: var(--rail); color: var(--rail-ink); padding: 56px clamp(24px, 6vw, 88px); display: flex; align-items: center; justify-content: center; }
 .login-brand-inner { width: 100%; max-width: 560px; }
-.login-title { color: #fff; font-size: clamp(44px, 5.6vw, 76px); font-weight: 700; line-height: 0.95; margin: 0 0 16px; }
+.login-title { color: #fff; font-size: clamp(96px, 11vw, 168px); line-height: 0.85; margin: 0; }
+/* The wordmark's fuse: lit once on load, it burns back and stops, like an SLA clock. */
+.wordmark-fuse { position: relative; height: 3px; margin: 14px 0 26px; max-width: 360px; background: #2a3644; border-radius: 2px; }
+.wordmark-fuse span { position: absolute; inset: 0 auto 0 0; width: 64%; background: var(--ok); border-radius: 2px; animation: burn 2.6s cubic-bezier(.3, .6, .4, 1) 300ms both; }
+.wordmark-fuse span::after { content: ""; position: absolute; right: -3px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--risk); box-shadow: 0 0 10px 3px rgba(231, 180, 83, 0.55); }
+.login-by { margin: 28px 0 0; font-size: 13px; color: #8fa0b2; }
+.login-by strong { color: var(--rail-ink); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .wordmark-fuse span { animation: none; } }
 .login-lede { font-size: 18px; max-width: 36ch; margin: 0 0 32px; color: var(--rail-ink); }
 
 /* The walk-through: one report, and what the desk does with it in the first second. */
 .walk { margin: 0; background: #1f2a37; border: 1px solid #2f3c4c; border-radius: 8px; overflow: hidden; }
 .walk-head { display: grid; gap: 4px; padding: 18px 20px 16px; border-bottom: 1px solid #2f3c4c; }
 .walk-kicker { font-size: 13px; color: #8fa0b2; }
-.walk-report { font: 600 20px/1.2 var(--display); color: #fff; }
+.walk-report { font: 400 26px/1.1 var(--serif); color: #fff; }
 .walk-meta { font-size: 13.5px; color: #a9b6c4; }
 .walk-steps { list-style: none; margin: 0; padding: 6px 20px; counter-reset: walk; }
 .walk-steps li { display: grid; grid-template-columns: 124px 1fr; gap: 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px dashed #2f3c4c; animation: walk-in 420ms ease-out both; counter-increment: walk; }
@@ -511,4 +522,13 @@ a.kpi:hover { background: #f7f9fa; }
   .mini { display: block; overflow-x: auto; }
   .inline-form > * { flex: 1 1 100%; }
   .lifecycle { overflow-x: auto; }
+}
+@media (min-width: 821px) and (max-height: 860px) {
+  /* Short laptop screens: keep the whole login page on one screen. */
+  .login-brand, .login-panel { padding-top: 32px; padding-bottom: 32px; }
+  .login-title { font-size: clamp(84px, 9vw, 120px); }
+  .wordmark-fuse { margin: 10px 0 18px; }
+  .login-lede { margin-bottom: 20px; }
+  .walk-steps li { padding: 7px 0; }
+  .login-by { margin-top: 16px; }
 }
